@@ -30,7 +30,7 @@ export function AudioStatusIndicator({ isEnabled, isPlaying }: AudioStatusIndica
         <div className="flex items-center gap-2 px-3 py-2 bg-yellow-500/20 backdrop-blur-sm rounded-full border border-yellow-500/30">
           <motion.div
             className="w-2 h-2 bg-yellow-400 rounded-full"
-            animate={{ pulse: true }}
+            animate={{ scale: [1, 1.2, 1], opacity: [1, 0.7, 1] }}
             transition={{ duration: 2, repeat: Infinity }}
           />
           <span className="text-xs text-yellow-400 font-medium">Click to Start Audio</span>
