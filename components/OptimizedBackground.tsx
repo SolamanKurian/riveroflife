@@ -42,8 +42,6 @@ export function OptimizedBackground({
           <div 
             className="absolute inset-0"
             style={backgroundStyle}
-            // Add loading="eager" for critical images
-            loading="eager"
           />
         </motion.div>
       )}
@@ -82,7 +80,6 @@ export function SharedBackground({
           <div 
             className="absolute inset-0"
             style={backgroundStyle}
-            loading="eager"
           />
         </motion.div>
       )}
