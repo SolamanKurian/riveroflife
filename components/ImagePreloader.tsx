@@ -68,7 +68,7 @@ export function ImagePreloader({ onLoadComplete }: ImagePreloaderProps) {
           const img = new Image()
           
           img.onload = () => {
-            setLoadedImages(prev => new Set([...prev, src]))
+            setLoadedImages(prev => new Set(Array.from(prev).concat(src)))
             resolve()
           }
           
