@@ -1,0 +1,26 @@
+{
+  "name": "There Is Still Hope",
+  "short_name": "Hope",
+  "description": "A message of hope, love, and redemption through faith in Jesus Christ",
+  "start_url": "/",
+  "display": "fullscreen",
+  "background_color": "#fafafa",
+  "theme_color": "#fafafa",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
+
+
