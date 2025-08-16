@@ -1,12 +1,15 @@
 {
   "name": "There Is Still Hope",
-  "short_name": "Hope",
+  "short_name": "RiverLife",
   "description": "A message of hope, love, and redemption through faith in Jesus Christ",
   "start_url": "/",
-  "display": "fullscreen",
-  "background_color": "#fafafa",
-  "theme_color": "#fafafa",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#1e293b",
   "orientation": "portrait-primary",
+  "scope": "/",
+  "lang": "en",
+  "categories": ["spirituality", "religion", "inspiration"],
   "icons": [
     {
       "src": "/icon-192.png",
@@ -20,7 +23,26 @@
       "type": "image/png",
       "purpose": "any maskable"
     }
-  ]
+  ],
+  "shortcuts": [
+    {
+      "name": "Start Over",
+      "short_name": "Restart",
+      "description": "Begin the journey from the beginning",
+      "url": "/?page=0",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ],
+  "prefer_related_applications": false,
+  "related_applications": [],
+  "edge_side_panel": {
+    "preferred_width": 400
+  }
 }
 
 

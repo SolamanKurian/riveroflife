@@ -6,73 +6,60 @@ import { TRACT_SENTENCES } from '@/data/tract'
 
 import { AudioToggle } from '@/components/AudioToggle'
 import { ShareButton } from '@/components/ShareButton'
+import { ImagePreloader } from '@/components/ImagePreloader'
+import { OptimizedBackground, SharedBackground } from '@/components/OptimizedBackground'
+import { ServiceWorkerRegistration } from '@/components/ServiceWorkerRegistration'
 
 export default function Home() {
   const [currentIndex, setCurrentIndex] = useState(0)
   const [isTransitioning, setIsTransitioning] = useState(false)
-  const [audioEnabled, setAudioEnabled] = useState(false)
-  const [audioContext, setAudioContext] = useState<AudioContext | null>(null)
-  const [oscillator, setOscillator] = useState<OscillatorNode | null>(null)
+  const [audioEnabled, setAudioEnabled] = useState(true) // Start with audio enabled
   const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(null)
+  const [imagesLoaded, setImagesLoaded] = useState(false)
+  const [isAudioPlaying, setIsAudioPlaying] = useState(false)
+  const [showMobileHint, setShowMobileHint] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const lastScrollTime = useRef(0)
   const scrollThrottle = 800 // ms
 
-  // Initialize audio context
-  useEffect(() => {
-    if (audioEnabled && !audioContext) {
-      const context = new (window.AudioContext || (window as any).webkitAudioContext)()
-      setAudioContext(context)
-    }
-  }, [audioEnabled, audioContext])
-
-  // Play ambient audio
-  useEffect(() => {
-    if (audioEnabled && audioContext && !oscillator) {
-      const osc = audioContext.createOscillator()
-      const gainNode = audioContext.createGain()
-      
-      osc.frequency.setValueAtTime(220, audioContext.currentTime) // A3 note
-      osc.type = 'sine'
-      
-      gainNode.gain.setValueAtTime(0.02, audioContext.currentTime) // Very low volume
-      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 2)
-      
-      osc.connect(gainNode)
-      gainNode.connect(audioContext.destination)
-      
-      osc.start()
-      setOscillator(osc)
-      
-      return () => {
-        osc.stop()
-        setOscillator(null)
-      }
-    }
-  }, [audioEnabled, audioContext, oscillator])
-
-  // Initialize MP3 audio element
+  // Simple audio initialization
   useEffect(() => {
     const audio = new Audio('/track.mp3')
     audio.loop = true
     audio.volume = 0.3
+    audio.preload = 'auto'
+    
+    // Set up audio event listeners
+    audio.addEventListener('canplaythrough', () => {
+      console.log('🎵 Audio ready to play')
+      // Try to start playing immediately
+      audio.play().then(() => {
+        console.log('✅ Audio started playing automatically')
+        setIsAudioPlaying(true)
+      }).catch((error) => {
+        console.log('❌ Auto-play failed:', error)
+        setIsAudioPlaying(false)
+      })
+    })
+
+    audio.addEventListener('play', () => {
+      console.log('▶️ Audio started playing')
+      setIsAudioPlaying(true)
+    })
+
+    audio.addEventListener('pause', () => {
+      console.log('⏸️ Audio paused')
+      setIsAudioPlaying(false)
+    })
+
+    audio.addEventListener('ended', () => {
+      console.log('🔚 Audio ended')
+      setIsAudioPlaying(false)
+    })
+
     setAudioElement(audio)
-    
-    // Auto-play when component mounts
-    const playAudio = async () => {
-      try {
-        await audio.play()
-        setAudioEnabled(true)
-        localStorage.setItem('audioEnabled', JSON.stringify(true))
-      } catch (error) {
-        console.log('Auto-play prevented by browser policy')
-        setAudioEnabled(false)
-        localStorage.setItem('audioEnabled', JSON.stringify(false))
-      }
-    }
-    
-    playAudio()
-    
+
+    // Cleanup
     return () => {
       audio.pause()
       audio.src = ''
@@ -83,27 +70,45 @@ export default function Home() {
   useEffect(() => {
     const saved = localStorage.getItem('audioEnabled')
     if (saved !== null) {
-      setAudioEnabled(JSON.parse(saved))
-    }
-  }, [])
-
-  // Save audio preference to localStorage and control MP3 audio
-  const handleAudioToggle = useCallback((enabled: boolean) => {
-    setAudioEnabled(enabled)
-    localStorage.setItem('audioEnabled', JSON.stringify(enabled))
-    
-    if (audioElement) {
-      if (enabled) {
-        audioElement.play().catch(error => {
-          console.log('Failed to play audio:', error)
-          setAudioEnabled(false)
-          localStorage.setItem('audioEnabled', JSON.stringify(false))
-        })
-      } else {
-        audioElement.pause()
+      const enabled = JSON.parse(saved)
+      setAudioEnabled(enabled)
+      
+      // If audio was previously enabled, try to resume playing
+      if (enabled && audioElement && audioElement.paused) {
+        audioElement.play().catch(console.error)
       }
     }
   }, [audioElement])
+
+  // Save audio preference to localStorage
+  useEffect(() => {
+    localStorage.setItem('audioEnabled', JSON.stringify(audioEnabled))
+  }, [audioEnabled])
+
+  // Handle audio toggle (mute/unmute)
+  const handleAudioToggle = useCallback((enabled: boolean) => {
+    if (audioElement) {
+      if (enabled) {
+        // Unmute: Resume playing
+        audioElement.play().then(() => {
+          setIsAudioPlaying(true)
+          console.log('✅ Audio unmuted and playing')
+        }).catch((error) => {
+          console.log('❌ Failed to resume audio:', error)
+          setIsAudioPlaying(false)
+        })
+      } else {
+        // Mute: Pause audio
+        audioElement.pause()
+        setIsAudioPlaying(false)
+        console.log('🔇 Audio muted')
+      }
+    }
+    
+    setAudioEnabled(enabled)
+  }, [audioElement])
+
+
 
   const navigateToSentence = useCallback((direction: 'next' | 'prev') => {
     if (isTransitioning) return
@@ -153,21 +158,40 @@ export default function Home() {
     }
   }, [navigateToSentence, goToFirst])
 
-  // Handle touch/swipe events
-  const touchStart = useRef<number>(0)
-  const touchEnd = useRef<number>(0)
+  // Handle touch/swipe events for mobile
+  const touchStart = useRef<{ x: number; y: number }>({ x: 0, y: 0 })
+  const touchEnd = useRef<{ x: number; y: number }>({ x: 0, y: 0 })
   
   const handleTouchStart = useCallback((e: TouchEvent) => {
-    touchStart.current = e.targetTouches[0].clientX
+    touchStart.current = {
+      x: e.targetTouches[0].clientX,
+      y: e.targetTouches[0].clientY
+    }
   }, [])
   
   const handleTouchEnd = useCallback((e: TouchEvent) => {
-    touchEnd.current = e.changedTouches[0].clientX
-    const diff = touchStart.current - touchEnd.current
+    touchEnd.current = {
+      x: e.changedTouches[0].clientX,
+      y: e.changedTouches[0].clientY
+    }
     
-    if (Math.abs(diff) > 50) { // Minimum swipe distance
-      const direction = diff > 0 ? 'next' : 'prev'
-      navigateToSentence(direction)
+    const diffX = touchStart.current.x - touchEnd.current.x
+    const diffY = touchStart.current.y - touchEnd.current.y
+    
+    const minSwipeDistance = 50 // Minimum swipe distance
+    
+    if (Math.abs(diffX) > Math.abs(diffY)) {
+      // Horizontal swipe
+      if (Math.abs(diffX) > minSwipeDistance) {
+        const direction = diffX > 0 ? 'next' : 'prev'
+        navigateToSentence(direction)
+      }
+    } else {
+      // Vertical swipe
+      if (Math.abs(diffY) > minSwipeDistance) {
+        const direction = diffY > 0 ? 'next' : 'prev' // Up swipe = forward, Down swipe = backward
+        navigateToSentence(direction)
+      }
     }
   }, [navigateToSentence])
 
@@ -188,6 +212,43 @@ export default function Home() {
       container.removeEventListener('touchend', handleTouchEnd)
     }
   }, [handleWheel, handleKeyDown, handleTouchStart, handleTouchEnd])
+
+  // Add user interaction listener to help start audio
+  useEffect(() => {
+    const handleUserInteraction = async () => {
+      if (audioElement && audioElement.paused && audioEnabled) {
+        try {
+          await audioElement.play()
+          console.log('✅ Audio started on user interaction')
+          setIsAudioPlaying(true)
+        } catch (error) {
+          console.log('❌ Failed to start audio on user interaction:', error)
+        }
+      }
+    }
+
+    // Add listeners for common user interactions
+    const events = ['click', 'mousedown', 'touchstart', 'keydown']
+    events.forEach(event => {
+      document.addEventListener(event, handleUserInteraction, { once: true, passive: true })
+    })
+
+    return () => {
+      events.forEach(event => {
+        document.removeEventListener(event, handleUserInteraction)
+      })
+    }
+  }, [audioElement, audioEnabled])
+
+  // Show mobile hint on first load
+  useEffect(() => {
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+    if (isMobile) {
+      setShowMobileHint(true)
+      const timer = setTimeout(() => setShowMobileHint(false), 3000)
+      return () => clearTimeout(timer)
+    }
+  }, [])
 
   const currentSentence = TRACT_SENTENCES[currentIndex]
   const isFirst = currentIndex === 0
@@ -1794,342 +1855,31 @@ export default function Home() {
   }
 
   return (
-    <div 
-      ref={containerRef}
-      className="relative h-screen w-screen gradient-bg overflow-hidden"
-      style={{ 
-        background: 'linear-gradient(-45deg, #f8fafc, #f1f5f9, #e2e8f0, #f8fafc)',
-        backgroundSize: '400% 400%'
-      }}
-    >
-      {/* Hidden audio element for MP3 playback */}
-      {audioElement && (
-        <audio
-          ref={(el) => {
-            if (el) {
-              el.src = '/track.mp3'
-              el.loop = true
-              el.volume = 0.3
-            }
-          }}
-          preload="auto"
-        />
-      )}
+    <>
+      {/* Service Worker Registration */}
+      <ServiceWorkerRegistration />
+      
+      {/* Image Preloader */}
+      <ImagePreloader onLoadComplete={() => setImagesLoaded(true)} />
+      
+      <div 
+        ref={containerRef}
+        className="relative h-screen w-screen gradient-bg overflow-hidden touch-scroll"
+        style={{ 
+          background: 'linear-gradient(-45deg, #f8fafc, #f1f5f9, #e2e8f0, #f8fafc)',
+          backgroundSize: '400% 400%'
+        }}
+      >
+        {/* Subtle animated gradient overlay */}
+        <div className="absolute inset-0 opacity-10">
+          <div className="absolute inset-0 bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 animate-gradient" />
+        </div>
 
-      {/* Subtle animated gradient overlay */}
-      <div className="absolute inset-0 opacity-10">
-        <div className="absolute inset-0 bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 animate-gradient" />
-      </div>
-
-      {/* Special background for first page */}
-      <AnimatePresence mode="wait">
-        {isTitle && (
-          <motion.div
-            key="first-page-bg"
-            className="absolute inset-0 z-0"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.8, ease: "easeInOut" }}
-          >
-            <div 
-              className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-              style={{ backgroundImage: 'url(/one.svg)' }}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Special background for second page */}
-      <AnimatePresence mode="wait">
-        {currentIndex === 1 && (
-          <motion.div
-            key="second-page-bg"
-            className="absolute inset-0 z-0"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.8, ease: "easeInOut" }}
-          >
-            <div 
-              className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-              style={{ backgroundImage: 'url(/two.svg)' }}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Special background for third page */}
-      <AnimatePresence mode="wait">
-        {currentIndex === 2 && (
-          <motion.div
-            key="third-page-bg"
-            className="absolute inset-0 z-0"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.8, ease: "easeInOut" }}
-          >
-            <div 
-              className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-              style={{ backgroundImage: 'url(/three.svg)' }}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Special background for fourth page */}
-      <AnimatePresence mode="wait">
-        {currentIndex === 3 && (
-          <motion.div
-            key="fourth-page-bg"
-            className="absolute inset-0 z-0"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.8, ease: "easeInOut" }}
-          >
-            <div 
-              className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-              style={{ backgroundImage: 'url(/four.svg)' }}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Special background for fifth page */}
-      <AnimatePresence mode="wait">
-        {currentIndex === 4 && (
-          <motion.div
-            key="fifth-page-bg"
-            className="absolute inset-0 z-0"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.8, ease: "easeInOut" }}
-          >
-            <div 
-              className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-              style={{ backgroundImage: 'url(/five.svg)' }}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Special background for sixth page */}
-      <AnimatePresence mode="wait">
-        {currentIndex === 5 && (
-          <motion.div
-            key="sixth-page-bg"
-            className="absolute inset-0 z-0"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.8, ease: "easeInOut" }}
-          >
-            <div 
-              className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-              style={{ backgroundImage: 'url(/six.svg)' }}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Special background for seventh page */}
-      <AnimatePresence mode="wait">
-        {currentIndex === 6 && (
-          <motion.div
-            key="seventh-page-bg"
-            className="absolute inset-0 z-0"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.8, ease: "easeInOut" }}
-          >
-            <div 
-              className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-              style={{ backgroundImage: 'url(/seven.svg)' }}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Special background for eighth page */}
-      <AnimatePresence mode="wait">
-        {currentIndex === 7 && (
-          <motion.div
-            key="eighth-page-bg"
-            className="absolute inset-0 z-0"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.8, ease: "easeInOut" }}
-          >
-            <div 
-              className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-              style={{ backgroundImage: 'url(/eight.svg)' }}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Special background for ninth page */}
-      <AnimatePresence mode="wait">
-        {currentIndex === 8 && (
-          <motion.div
-            key="ninth-page-bg"
-            className="absolute inset-0 z-0"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.8, ease: "easeInOut" }}
-          >
-            <div 
-              className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-              style={{ backgroundImage: 'url(/nine.svg)' }}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Special background for tenth page */}
-      <AnimatePresence mode="wait">
-        {currentIndex === 9 && (
-          <motion.div
-            key="tenth-page-bg"
-            className="absolute inset-0 z-0"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.8, ease: "easeInOut" }}
-          >
-            <div 
-              className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-              style={{ backgroundImage: 'url(/ten.svg)' }}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Special background for eleventh page */}
-      <AnimatePresence mode="wait">
-        {currentIndex === 10 && (
-          <motion.div
-            key="eleventh-page-bg"
-            className="absolute inset-0 z-0"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.8, ease: "easeInOut" }}
-          >
-            <div 
-              className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-              style={{ backgroundImage: 'url(/eleven.svg)' }}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Special background for twelfth page */}
-      <AnimatePresence mode="wait">
-        {currentIndex === 11 && (
-          <motion.div
-            key="twelfth-page-bg"
-            className="absolute inset-0 z-0"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.8, ease: "easeInOut" }}
-          >
-            <div 
-              className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-              style={{ backgroundImage: 'url(/twelve.svg)' }}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Special background for thirteenth page */}
-      <AnimatePresence mode="wait">
-        {currentIndex === 12 && (
-          <motion.div
-            key="thirteenth-page-bg"
-            className="absolute inset-0 z-0"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.8, ease: "easeInOut" }}
-          >
-            <div 
-              className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-              style={{ backgroundImage: 'url(/thirteen.svg)' }}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Special background for fourteenth page */}
-      <AnimatePresence mode="wait">
-        {currentIndex === 13 && (
-          <motion.div
-            key="fourteenth-page-bg"
-            className="absolute inset-0 z-0"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.8, ease: "easeInOut" }}
-          >
-            <div 
-              className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-              style={{ backgroundImage: 'url(/fourteen.svg)' }}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Special background for fifteenth page */}
-      <AnimatePresence mode="wait">
-        {currentIndex === 14 && (
-          <motion.div
-            key="fifteenth-page-bg"
-            className="absolute inset-0 z-0"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.8, ease: "easeInOut" }}
-          >
-            <div 
-              className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-              style={{ backgroundImage: 'url(/fifteen.svg)' }}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Special background for sixteenth page */}
-      <AnimatePresence mode="wait">
-        {currentIndex === 15 && (
-          <motion.div
-            key="sixteenth-page-bg"
-            className="absolute inset-0 z-0"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.8, ease: "easeInOut" }}
-          >
-            <div 
-              className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-              style={{ backgroundImage: 'url(/sixteen.svg)' }}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-              {/* Special background for seventeenth page */}
+        {/* Special background for first page */}
         <AnimatePresence mode="wait">
-          {currentIndex === 16 && (
+          {isTitle && (
             <motion.div
-              key="seventeenth-page-bg"
+              key="first-page-bg"
               className="absolute inset-0 z-0"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -2138,655 +1888,959 @@ export default function Home() {
             >
               <div 
                 className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-                style={{ backgroundImage: 'url(/seventeen.svg)' }}
+                style={{ backgroundImage: 'url(/one.svg)' }}
               />
             </motion.div>
           )}
         </AnimatePresence>
 
-      {/* Special background for eighteenth page */}
-      <AnimatePresence mode="wait">
-        {currentIndex === 17 && (
-          <motion.div
-            key="eighteenth-page-bg"
-            className="absolute inset-0 z-0"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.8, ease: "easeInOut" }}
-          >
-            <div 
-              className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-              style={{ backgroundImage: 'url(/eighteenth.svg)' }}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Special background for nineteenth page */}
-      <AnimatePresence mode="wait">
-        {currentIndex === 18 && (
-          <motion.div
-            key="nineteenth-page-bg"
-            className="absolute inset-0 z-0"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.8, ease: "easeInOut" }}
-          >
-            <div 
-              className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-              style={{ backgroundImage: 'url(/nineteen.svg)' }}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Special background for twentieth page */}
-      <AnimatePresence mode="wait">
-        {currentIndex === 19 && (
-          <motion.div
-            key="twentieth-page-bg"
-            className="absolute inset-0 z-0"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.8, ease: "easeInOut" }}
-          >
-            <div 
-              className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-              style={{ backgroundImage: 'url(/twenty.svg)' }}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Special background for twenty-first page */}
-      <AnimatePresence mode="wait">
-        {currentIndex === 20 && (
-          <motion.div
-            key="twenty-first-page-bg"
-            className="absolute inset-0 z-0"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.8, ease: "easeInOut" }}
-          >
-            <div 
-              className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-              style={{ backgroundImage: 'url(/twentyone.svg)' }}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Special background for twenty-second page */}
-      <AnimatePresence mode="wait">
-        {currentIndex === 21 && (
-          <motion.div
-            key="twenty-second-page-bg"
-            className="absolute inset-0 z-0"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.8, ease: "easeInOut" }}
-          >
-            <div 
-              className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-              style={{ backgroundImage: 'url(/twentytwo.svg)' }}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Special background for twenty-third page */}
-      <AnimatePresence mode="wait">
-        {currentIndex === 22 && (
-          <motion.div
-            key="twenty-third-page-bg"
-            className="absolute inset-0 z-0"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.8, ease: "easeInOut" }}
-          >
-            <div 
-              className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-              style={{ backgroundImage: 'url(/twentythree.svg)' }}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Special background for twenty-fourth page */}
-      <AnimatePresence mode="wait">
-        {currentIndex === 23 && (
-          <motion.div
-            key="twenty-fourth-page-bg"
-            className="absolute inset-0 z-0"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.8, ease: "easeInOut" }}
-          >
-            <div 
-              className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-              style={{ backgroundImage: 'url(/twentyfour.svg)' }}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Special background for twenty-fifth page */}
-      <AnimatePresence mode="wait">
-        {currentIndex === 24 && (
-          <motion.div
-            key="twenty-fifth-page-bg"
-            className="absolute inset-0 z-0"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.8, ease: "easeInOut" }}
-          >
-            <div 
-              className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-              style={{ backgroundImage: 'url(/twentyfive.svg)' }}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Special background for twenty-sixth page */}
-      <AnimatePresence mode="wait">
-        {currentIndex === 25 && (
-          <motion.div
-            key="twenty-sixth-page-bg"
-            className="absolute inset-0 z-0"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.8, ease: "easeInOut" }}
-          >
-            <div 
-              className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-              style={{ backgroundImage: 'url(/twentysix.svg)' }}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Special background for twenty-seventh page */}
-      <AnimatePresence mode="wait">
-        {currentIndex === 26 && (
-          <motion.div
-            key="twenty-seventh-page-bg"
-            className="absolute inset-0 z-0"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.8, ease: "easeInOut" }}
-          >
-            <div 
-              className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-              style={{ backgroundImage: 'url(/twentyseven.svg)' }}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Special background for twenty-eighth page */}
-      <AnimatePresence mode="wait">
-        {currentIndex === 27 && (
-          <motion.div
-            key="twenty-eighth-page-bg"
-            className="absolute inset-0 z-0"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.8, ease: "easeInOut" }}
-          >
-            <div 
-              className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-              style={{ backgroundImage: 'url(/twentyeight.svg)' }}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Special background for twenty-ninth page */}
-      <AnimatePresence mode="wait">
-        {currentIndex === 28 && (
-          <motion.div
-            key="twenty-ninth-page-bg"
-            className="absolute inset-0 z-0"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.8, ease: "easeInOut" }}
-          >
-            <div 
-              className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-              style={{ backgroundImage: 'url(/twentynine.svg)' }}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Special background for thirtieth page */}
-      <AnimatePresence mode="wait">
-        {currentIndex === 29 && (
-          <motion.div
-            key="thirtieth-page-bg"
-            className="absolute inset-0 z-0"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.8, ease: "easeInOut" }}
-          >
-            <div 
-              className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-              style={{ backgroundImage: 'url(/thirty.svg)' }}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Special background for thirty-first page */}
-      <AnimatePresence mode="wait">
-        {currentIndex === 30 && (
-          <motion.div
-            key="thirty-first-page-bg"
-            className="absolute inset-0 z-0"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.8, ease: "easeInOut" }}
-          >
-            <div 
-              className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-              style={{ backgroundImage: 'url(/thirtyone.svg)' }}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Special background for thirty-second page */}
-      <AnimatePresence mode="wait">
-        {currentIndex === 31 && (
-          <motion.div
-            key="thirty-second-page-bg"
-            className="absolute inset-0 z-0"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.8, ease: "easeInOut" }}
-          >
-            <div 
-              className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-              style={{ backgroundImage: 'url(/thirtytwo.svg)' }}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Special background for thirty-third page */}
-      <AnimatePresence mode="wait">
-        {currentIndex === 32 && (
-          <motion.div
-            key="thirty-third-page-bg"
-            className="absolute inset-0 z-0"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.8, ease: "easeInOut" }}
-          >
-            <div 
-              className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-              style={{ backgroundImage: 'url(/thirtythree.svg)' }}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Special background for thirty-fourth page */}
-      <AnimatePresence mode="wait">
-        {currentIndex === 33 && (
-          <motion.div
-            key="thirty-fourth-page-bg"
-            className="absolute inset-0 z-0"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.8, ease: "easeInOut" }}
-          >
-            <div 
-              className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-              style={{ backgroundImage: 'url(/thirtyfour.svg)' }}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Special background for thirty-fifth page */}
-      <AnimatePresence mode="wait">
-        {currentIndex === 34 && (
-          <motion.div
-            key="thirty-fifth-page-bg"
-            className="absolute inset-0 z-0"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.8, ease: "easeInOut" }}
-          >
-            <div 
-              className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-              style={{ backgroundImage: 'url(/thirtyfive.svg)' }}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Special background for thirty-sixth page */}
-      <AnimatePresence mode="wait">
-        {currentIndex === 35 && (
-          <motion.div
-            key="thirty-sixth-page-bg"
-            className="absolute inset-0 z-0"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.8, ease: "easeInOut" }}
-          >
-            <div 
-              className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-              style={{ backgroundImage: 'url(/thirtysix.svg)' }}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Special background for thirty-seventh page */}
-      <AnimatePresence mode="wait">
-        {currentIndex === 36 && (
-          <motion.div
-            key="thirty-seventh-page-bg"
-            className="absolute inset-0 z-0"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.8, ease: "easeInOut" }}
-          >
-            <div 
-              className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-              style={{ backgroundImage: 'url(/thirtyseven.svg)' }}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Special background for thirty-eighth page */}
-      <AnimatePresence mode="wait">
-        {currentIndex === 37 && (
-          <motion.div
-            key="thirty-eighth-page-bg"
-            className="absolute inset-0 z-0"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.8, ease: "easeInOut" }}
-          >
-            <div 
-              className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-              style={{ backgroundImage: 'url(/thirtyseven.svg)' }}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Special background for thirty-ninth page */}
-      <AnimatePresence mode="wait">
-        {currentIndex === 38 && (
-          <motion.div
-            key="thirty-ninth-page-bg"
-            className="absolute inset-0 z-0"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.8, ease: "easeInOut" }}
-          >
-            <div 
-              className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-              style={{ backgroundImage: 'url(/thirtyseven.svg)' }}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Special background for fortieth page */}
-      <AnimatePresence mode="wait">
-        {currentIndex === 39 && (
-          <motion.div
-            key="fortieth-page-bg"
-            className="absolute inset-0 z-0"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.8, ease: "easeInOut" }}
-          >
-            <div 
-              className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-              style={{ backgroundImage: 'url(/thirtyseven.svg)' }}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Special background for forty-first page */}
-      <AnimatePresence mode="wait">
-        {currentIndex === 40 && (
-          <motion.div
-            key="forty-first-page-bg"
-            className="absolute inset-0 z-0"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.8, ease: "easeInOut" }}
-          >
-            <div 
-              className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-              style={{ backgroundImage: 'url(/fourtyone.svg)' }}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Special background for forty-second page */}
-      <AnimatePresence mode="wait">
-        {currentIndex === 41 && (
-          <motion.div
-            key="forty-second-page-bg"
-            className="absolute inset-0 z-0"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.8, ease: "easeInOut" }}
-          >
-            <div 
-              className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-              style={{ backgroundImage: 'url(/fourtytwo.svg)' }}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Special background for forty-third page */}
-      <AnimatePresence mode="wait">
-        {currentIndex === 42 && (
-          <motion.div
-            key="forty-third-page-bg"
-            className="absolute inset-0 z-0"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.8, ease: "easeInOut" }}
-          >
-            <div 
-              className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-              style={{ backgroundImage: 'url(/fourtythree.svg)' }}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Special background for forty-fourth page */}
-      <AnimatePresence mode="wait">
-        {currentIndex === 43 && (
-          <motion.div
-            key="forty-fourth-page-bg"
-            className="absolute inset-0 z-0"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.8, ease: "easeInOut" }}
-          >
-            <div 
-              className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-              style={{ backgroundImage: 'url(/fourtyfour.svg)' }}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Special background for forty-fifth page */}
-      <AnimatePresence mode="wait">
-        {currentIndex === 44 && (
-          <motion.div
-            key="forty-fifth-page-bg"
-            className="absolute inset-0 z-0"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.8, ease: "easeInOut" }}
-          >
-            <div 
-              className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-              style={{ backgroundImage: 'url(/fourtyfive.svg)' }}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Special background for forty-sixth page */}
-      <AnimatePresence mode="wait">
-        {currentIndex === 45 && (
-          <motion.div
-            key="forty-sixth-page-bg"
-            className="absolute inset-0 z-0"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.8, ease: "easeInOut" }}
-          >
-            <div 
-              className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-              style={{ backgroundImage: 'url(/fourtysix.svg)' }}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-
-
-      {/* Main content */}
-      <main className="relative z-10 h-full flex flex-col items-center justify-center px-6">
+        {/* Special background for second page */}
         <AnimatePresence mode="wait">
-          <motion.section
-            key={currentIndex}
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 1.05 }}
-            transition={{ 
-              duration: isSecondPage ? 1.2 : 1.0, 
-              ease: "easeInOut",
-              scale: { duration: isSecondPage ? 1.0 : 0.8 },
-              delay: 0
-            }}
-            className="text-center max-w-4xl mx-auto"
-          >
+          {currentIndex === 1 && (
             <motion.div
-              className={`${
-                isTitle 
-                  ? 'text-7xl md:text-8xl lg:text-9xl font-bold tracking-wider text-white drop-shadow-2xl' 
-                  : isSecondPage
-                    ? 'text-6xl md:text-7xl lg:text-8xl font-bold tracking-wide text-white drop-shadow-2xl'
-                    : isThirdPage
-                      ? 'text-5xl md:text-6xl lg:text-7xl font-bold tracking-wide text-white drop-shadow-2xl'
-                      : isFourthPage
+              key="second-page-bg"
+              className="absolute inset-0 z-0"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.8, ease: "easeInOut" }}
+            >
+              <div 
+                className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+                style={{ backgroundImage: 'url(/two.svg)' }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Special background for third page */}
+        <AnimatePresence mode="wait">
+          {currentIndex === 2 && (
+            <motion.div
+              key="third-page-bg"
+              className="absolute inset-0 z-0"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.8, ease: "easeInOut" }}
+            >
+              <div 
+                className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+                style={{ backgroundImage: 'url(/three.svg)' }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Special background for fourth page */}
+        <AnimatePresence mode="wait">
+          {currentIndex === 3 && (
+            <motion.div
+              key="fourth-page-bg"
+              className="absolute inset-0 z-0"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.8, ease: "easeInOut" }}
+            >
+              <div 
+                className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+                style={{ backgroundImage: 'url(/four.svg)' }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Special background for fifth page */}
+        <AnimatePresence mode="wait">
+          {currentIndex === 4 && (
+            <motion.div
+              key="fifth-page-bg"
+              className="absolute inset-0 z-0"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.8, ease: "easeInOut" }}
+            >
+              <div 
+                className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+                style={{ backgroundImage: 'url(/five.svg)' }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Special background for sixth page */}
+        <AnimatePresence mode="wait">
+          {currentIndex === 5 && (
+            <motion.div
+              key="sixth-page-bg"
+              className="absolute inset-0 z-0"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.8, ease: "easeInOut" }}
+            >
+              <div 
+                className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+                style={{ backgroundImage: 'url(/six.svg)' }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Special background for seventh page */}
+        <AnimatePresence mode="wait">
+          {currentIndex === 6 && (
+            <motion.div
+              key="seventh-page-bg"
+              className="absolute inset-0 z-0"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.8, ease: "easeInOut" }}
+            >
+              <div 
+                className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+                style={{ backgroundImage: 'url(/seven.svg)' }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Special background for eighth page */}
+        <AnimatePresence mode="wait">
+          {currentIndex === 7 && (
+            <motion.div
+              key="eighth-page-bg"
+              className="absolute inset-0 z-0"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.8, ease: "easeInOut" }}
+            >
+              <div 
+                className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+                style={{ backgroundImage: 'url(/eight.svg)' }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Special background for ninth page */}
+        <AnimatePresence mode="wait">
+          {currentIndex === 8 && (
+            <motion.div
+              key="ninth-page-bg"
+              className="absolute inset-0 z-0"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.8, ease: "easeInOut" }}
+            >
+              <div 
+                className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+                style={{ backgroundImage: 'url(/nine.svg)' }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Special background for tenth page */}
+        <AnimatePresence mode="wait">
+          {currentIndex === 9 && (
+            <motion.div
+              key="tenth-page-bg"
+              className="absolute inset-0 z-0"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.8, ease: "easeInOut" }}
+            >
+              <div 
+                className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+                style={{ backgroundImage: 'url(/ten.svg)' }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Special background for eleventh page */}
+        <AnimatePresence mode="wait">
+          {currentIndex === 10 && (
+            <motion.div
+              key="eleventh-page-bg"
+              className="absolute inset-0 z-0"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.8, ease: "easeInOut" }}
+            >
+              <div 
+                className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+                style={{ backgroundImage: 'url(/eleven.svg)' }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Special background for twelfth page */}
+        <AnimatePresence mode="wait">
+          {currentIndex === 11 && (
+            <motion.div
+              key="twelfth-page-bg"
+              className="absolute inset-0 z-0"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.8, ease: "easeInOut" }}
+            >
+              <div 
+                className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+                style={{ backgroundImage: 'url(/twelve.svg)' }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Special background for thirteenth page */}
+        <AnimatePresence mode="wait">
+          {currentIndex === 12 && (
+            <motion.div
+              key="thirteenth-page-bg"
+              className="absolute inset-0 z-0"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.8, ease: "easeInOut" }}
+            >
+              <div 
+                className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+                style={{ backgroundImage: 'url(/thirteen.svg)' }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Special background for fourteenth page */}
+        <AnimatePresence mode="wait">
+          {currentIndex === 13 && (
+            <motion.div
+              key="fourteenth-page-bg"
+              className="absolute inset-0 z-0"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.8, ease: "easeInOut" }}
+            >
+              <div 
+                className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+                style={{ backgroundImage: 'url(/fourteen.svg)' }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Special background for fifteenth page */}
+        <AnimatePresence mode="wait">
+          {currentIndex === 14 && (
+            <motion.div
+              key="fifteenth-page-bg"
+              className="absolute inset-0 z-0"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.8, ease: "easeInOut" }}
+            >
+              <div 
+                className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+                style={{ backgroundImage: 'url(/fifteen.svg)' }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Special background for sixteenth page */}
+        <AnimatePresence mode="wait">
+          {currentIndex === 15 && (
+            <motion.div
+              key="sixteenth-page-bg"
+              className="absolute inset-0 z-0"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.8, ease: "easeInOut" }}
+            >
+              <div 
+                className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+                style={{ backgroundImage: 'url(/sixteen.svg)' }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+                {/* Special background for seventeenth page */}
+          <AnimatePresence mode="wait">
+            {currentIndex === 16 && (
+              <motion.div
+                key="seventeenth-page-bg"
+                className="absolute inset-0 z-0"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.8, ease: "easeInOut" }}
+              >
+                <div 
+                  className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+                  style={{ backgroundImage: 'url(/seventeen.svg)' }}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+        {/* Special background for eighteenth page */}
+        <AnimatePresence mode="wait">
+          {currentIndex === 17 && (
+            <motion.div
+              key="eighteenth-page-bg"
+              className="absolute inset-0 z-0"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.8, ease: "easeInOut" }}
+            >
+              <div 
+                className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+                style={{ backgroundImage: 'url(/eighteenth.svg)' }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Special background for nineteenth page */}
+        <AnimatePresence mode="wait">
+          {currentIndex === 18 && (
+            <motion.div
+              key="nineteenth-page-bg"
+              className="absolute inset-0 z-0"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.8, ease: "easeInOut" }}
+            >
+              <div 
+                className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+                style={{ backgroundImage: 'url(/nineteen.svg)' }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Special background for twentieth page */}
+        <AnimatePresence mode="wait">
+          {currentIndex === 19 && (
+            <motion.div
+              key="twentieth-page-bg"
+              className="absolute inset-0 z-0"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.8, ease: "easeInOut" }}
+            >
+              <div 
+                className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+                style={{ backgroundImage: 'url(/twenty.svg)' }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Special background for twenty-first page */}
+        <AnimatePresence mode="wait">
+          {currentIndex === 20 && (
+            <motion.div
+              key="twenty-first-page-bg"
+              className="absolute inset-0 z-0"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.8, ease: "easeInOut" }}
+            >
+              <div 
+                className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+                style={{ backgroundImage: 'url(/twentyone.svg)' }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Special background for twenty-second page */}
+        <AnimatePresence mode="wait">
+          {currentIndex === 21 && (
+            <motion.div
+              key="twenty-second-page-bg"
+              className="absolute inset-0 z-0"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.8, ease: "easeInOut" }}
+            >
+              <div 
+                className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+                style={{ backgroundImage: 'url(/twentytwo.svg)' }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Special background for twenty-third page */}
+        <AnimatePresence mode="wait">
+          {currentIndex === 22 && (
+            <motion.div
+              key="twenty-third-page-bg"
+              className="absolute inset-0 z-0"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.8, ease: "easeInOut" }}
+            >
+              <div 
+                className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+                style={{ backgroundImage: 'url(/twentythree.svg)' }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Special background for twenty-fourth page */}
+        <AnimatePresence mode="wait">
+          {currentIndex === 23 && (
+            <motion.div
+              key="twenty-fourth-page-bg"
+              className="absolute inset-0 z-0"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.8, ease: "easeInOut" }}
+            >
+              <div 
+                className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+                style={{ backgroundImage: 'url(/twentyfour.svg)' }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Special background for twenty-fifth page */}
+        <AnimatePresence mode="wait">
+          {currentIndex === 24 && (
+            <motion.div
+              key="twenty-fifth-page-bg"
+              className="absolute inset-0 z-0"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.8, ease: "easeInOut" }}
+            >
+              <div 
+                className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+                style={{ backgroundImage: 'url(/twentyfive.svg)' }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Special background for twenty-sixth page */}
+        <AnimatePresence mode="wait">
+          {currentIndex === 25 && (
+            <motion.div
+              key="twenty-sixth-page-bg"
+              className="absolute inset-0 z-0"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.8, ease: "easeInOut" }}
+            >
+              <div 
+                className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+                style={{ backgroundImage: 'url(/twentysix.svg)' }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Special background for twenty-seventh page */}
+        <AnimatePresence mode="wait">
+          {currentIndex === 26 && (
+            <motion.div
+              key="twenty-seventh-page-bg"
+              className="absolute inset-0 z-0"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.8, ease: "easeInOut" }}
+            >
+              <div 
+                className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+                style={{ backgroundImage: 'url(/twentyseven.svg)' }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Special background for twenty-eighth page */}
+        <AnimatePresence mode="wait">
+          {currentIndex === 27 && (
+            <motion.div
+              key="twenty-eighth-page-bg"
+              className="absolute inset-0 z-0"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.8, ease: "easeInOut" }}
+            >
+              <div 
+                className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+                style={{ backgroundImage: 'url(/twentyeight.svg)' }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Special background for twenty-ninth page */}
+        <AnimatePresence mode="wait">
+          {currentIndex === 28 && (
+            <motion.div
+              key="twenty-ninth-page-bg"
+              className="absolute inset-0 z-0"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.8, ease: "easeInOut" }}
+            >
+              <div 
+                className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+                style={{ backgroundImage: 'url(/twentynine.svg)' }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Special background for thirtieth page */}
+        <AnimatePresence mode="wait">
+          {currentIndex === 29 && (
+            <motion.div
+              key="thirtieth-page-bg"
+              className="absolute inset-0 z-0"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.8, ease: "easeInOut" }}
+            >
+              <div 
+                className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+                style={{ backgroundImage: 'url(/thirty.svg)' }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Special background for thirty-first page */}
+        <AnimatePresence mode="wait">
+          {currentIndex === 30 && (
+            <motion.div
+              key="thirty-first-page-bg"
+              className="absolute inset-0 z-0"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.8, ease: "easeInOut" }}
+            >
+              <div 
+                className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+                style={{ backgroundImage: 'url(/thirtyone.svg)' }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Special background for thirty-second page */}
+        <AnimatePresence mode="wait">
+          {currentIndex === 31 && (
+            <motion.div
+              key="thirty-second-page-bg"
+              className="absolute inset-0 z-0"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.8, ease: "easeInOut" }}
+            >
+              <div 
+                className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+                style={{ backgroundImage: 'url(/thirtytwo.svg)' }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Special background for thirty-third page */}
+        <AnimatePresence mode="wait">
+          {currentIndex === 32 && (
+            <motion.div
+              key="thirty-third-page-bg"
+              className="absolute inset-0 z-0"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.8, ease: "easeInOut" }}
+            >
+              <div 
+                className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+                style={{ backgroundImage: 'url(/thirtythree.svg)' }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Special background for thirty-fourth page */}
+        <AnimatePresence mode="wait">
+          {currentIndex === 33 && (
+            <motion.div
+              key="thirty-fourth-page-bg"
+              className="absolute inset-0 z-0"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.8, ease: "easeInOut" }}
+            >
+              <div 
+                className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+                style={{ backgroundImage: 'url(/thirtyfour.svg)' }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Special background for thirty-fifth page */}
+        <AnimatePresence mode="wait">
+          {currentIndex === 34 && (
+            <motion.div
+              key="thirty-fifth-page-bg"
+              className="absolute inset-0 z-0"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.8, ease: "easeInOut" }}
+            >
+              <div 
+                className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+                style={{ backgroundImage: 'url(/thirtyfive.svg)' }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Special background for thirty-sixth page */}
+        <AnimatePresence mode="wait">
+          {currentIndex === 35 && (
+            <motion.div
+              key="thirty-sixth-page-bg"
+              className="absolute inset-0 z-0"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.8, ease: "easeInOut" }}
+            >
+              <div 
+                className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+                style={{ backgroundImage: 'url(/thirtysix.svg)' }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Special background for thirty-seventh page */}
+        <AnimatePresence mode="wait">
+          {currentIndex === 36 && (
+            <motion.div
+              key="thirty-seventh-page-bg"
+              className="absolute inset-0 z-0"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.8, ease: "easeInOut" }}
+            >
+              <div 
+                className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+                style={{ backgroundImage: 'url(/thirtyseven.svg)' }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Special background for thirty-eighth page */}
+        <AnimatePresence mode="wait">
+          {currentIndex === 37 && (
+            <motion.div
+              key="thirty-eighth-page-bg"
+              className="absolute inset-0 z-0"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.8, ease: "easeInOut" }}
+            >
+              <div 
+                className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+                style={{ backgroundImage: 'url(/thirtyseven.svg)' }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Special background for thirty-ninth page */}
+        <AnimatePresence mode="wait">
+          {currentIndex === 38 && (
+            <motion.div
+              key="thirty-ninth-page-bg"
+              className="absolute inset-0 z-0"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.8, ease: "easeInOut" }}
+            >
+              <div 
+                className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+                style={{ backgroundImage: 'url(/thirtyseven.svg)' }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Special background for fortieth page */}
+        <AnimatePresence mode="wait">
+          {currentIndex === 39 && (
+            <motion.div
+              key="fortieth-page-bg"
+              className="absolute inset-0 z-0"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.8, ease: "easeInOut" }}
+            >
+              <div 
+                className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+                style={{ backgroundImage: 'url(/thirtyseven.svg)' }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Special background for forty-first page */}
+        <AnimatePresence mode="wait">
+          {currentIndex === 40 && (
+            <motion.div
+              key="forty-first-page-bg"
+              className="absolute inset-0 z-0"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.8, ease: "easeInOut" }}
+            >
+              <div 
+                className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+                style={{ backgroundImage: 'url(/fourtyone.svg)' }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Special background for forty-second page */}
+        <AnimatePresence mode="wait">
+          {currentIndex === 41 && (
+            <motion.div
+              key="forty-second-page-bg"
+              className="absolute inset-0 z-0"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.8, ease: "easeInOut" }}
+            >
+              <div 
+                className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+                style={{ backgroundImage: 'url(/fourtytwo.svg)' }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Special background for forty-third page */}
+        <AnimatePresence mode="wait">
+          {currentIndex === 42 && (
+            <motion.div
+              key="forty-third-page-bg"
+              className="absolute inset-0 z-0"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.8, ease: "easeInOut" }}
+            >
+              <div 
+                className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+                style={{ backgroundImage: 'url(/fourtythree.svg)' }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Special background for forty-fourth page */}
+        <AnimatePresence mode="wait">
+          {currentIndex === 43 && (
+            <motion.div
+              key="forty-fourth-page-bg"
+              className="absolute inset-0 z-0"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.8, ease: "easeInOut" }}
+            >
+              <div 
+                className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+                style={{ backgroundImage: 'url(/fourtyfour.svg)' }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Special background for forty-fifth page */}
+        <AnimatePresence mode="wait">
+          {currentIndex === 44 && (
+            <motion.div
+              key="forty-fifth-page-bg"
+              className="absolute inset-0 z-0"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.8, ease: "easeInOut" }}
+            >
+              <div 
+                className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+                style={{ backgroundImage: 'url(/fourtyfive.svg)' }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Special background for forty-sixth page */}
+        <AnimatePresence mode="wait">
+          {currentIndex === 45 && (
+            <motion.div
+              key="forty-sixth-page-bg"
+              className="absolute inset-0 z-0"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.8, ease: "easeInOut" }}
+            >
+              <div 
+                className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+                style={{ backgroundImage: 'url(/fourtysix.svg)' }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+
+
+        {/* Main content */}
+        <main className="relative z-10 h-full flex flex-col items-center justify-center px-4 sm:px-6 md:px-8 min-h-screen">
+          <AnimatePresence mode="wait">
+            <motion.section
+              key={currentIndex}
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 1.05 }}
+              transition={{ 
+                duration: isSecondPage ? 1.2 : 1.0, 
+                ease: "easeInOut",
+                scale: { duration: isSecondPage ? 1.0 : 0.8 },
+                delay: 0
+              }}
+              className="text-center max-w-xs sm:max-w-sm md:max-w-2xl lg:max-w-4xl mx-auto px-2 sm:px-4 w-full"
+            >
+              <motion.div
+                className={`content-text ${
+                  isTitle 
+                    ? 'text-7xl md:text-8xl lg:text-9xl font-bold tracking-wider text-white drop-shadow-2xl' 
+                    : isSecondPage
+                      ? 'text-6xl md:text-7xl lg:text-8xl font-bold tracking-wide text-white drop-shadow-2xl'
+                      : isThirdPage
                         ? 'text-5xl md:text-6xl lg:text-7xl font-bold tracking-wide text-white drop-shadow-2xl'
-                        : isFifthPage
+                        : isFourthPage
                           ? 'text-5xl md:text-6xl lg:text-7xl font-bold tracking-wide text-white drop-shadow-2xl'
-                          : isSixthPage
+                          : isFifthPage
                             ? 'text-5xl md:text-6xl lg:text-7xl font-bold tracking-wide text-white drop-shadow-2xl'
-                            : isSeventhPage
+                            : isSixthPage
                               ? 'text-5xl md:text-6xl lg:text-7xl font-bold tracking-wide text-white drop-shadow-2xl'
-                              : isEighthPage
+                              : isSeventhPage
                                 ? 'text-5xl md:text-6xl lg:text-7xl font-bold tracking-wide text-white drop-shadow-2xl'
-                                : isNinthPage
+                                : isEighthPage
                                   ? 'text-5xl md:text-6xl lg:text-7xl font-bold tracking-wide text-white drop-shadow-2xl'
-                                  : isTenthPage
+                                  : isNinthPage
                                     ? 'text-5xl md:text-6xl lg:text-7xl font-bold tracking-wide text-white drop-shadow-2xl'
-                                    : isEleventhPage
+                                    : isTenthPage
                                       ? 'text-5xl md:text-6xl lg:text-7xl font-bold tracking-wide text-white drop-shadow-2xl'
-                                      : isTwelfthPage
+                                      : isEleventhPage
                                         ? 'text-5xl md:text-6xl lg:text-7xl font-bold tracking-wide text-white drop-shadow-2xl'
-                                        : isThirteenthPage
+                                        : isTwelfthPage
                                           ? 'text-5xl md:text-6xl lg:text-7xl font-bold tracking-wide text-white drop-shadow-2xl'
-                                          : isFourteenthPage
+                                          : isThirteenthPage
                                             ? 'text-5xl md:text-6xl lg:text-7xl font-bold tracking-wide text-white drop-shadow-2xl'
-                                            : isFifteenthPage
+                                            : isFourteenthPage
                                               ? 'text-5xl md:text-6xl lg:text-7xl font-bold tracking-wide text-white drop-shadow-2xl'
-                                              : isSixteenthPage
+                                              : isFifteenthPage
                                                 ? 'text-5xl md:text-6xl lg:text-7xl font-bold tracking-wide text-white drop-shadow-2xl'
-                                                : isSeventeenthPage
-                                                  ? 'text-6xl md:text-7xl lg:text-8xl font-bold tracking-wide text-white drop-shadow-2xl'
-                                                  : isEighteenthPage
+                                                : isSixteenthPage
+                                                  ? 'text-5xl md:text-6xl lg:text-7xl font-bold tracking-wide text-white drop-shadow-2xl'
+                                                  : isSeventeenthPage
                                                     ? 'text-6xl md:text-7xl lg:text-8xl font-bold tracking-wide text-white drop-shadow-2xl'
-                                                    : isNineteenthPage
+                                                    : isEighteenthPage
                                                       ? 'text-6xl md:text-7xl lg:text-8xl font-bold tracking-wide text-white drop-shadow-2xl'
-                                                      : isTwentiethPage
+                                                      : isNineteenthPage
                                                         ? 'text-6xl md:text-7xl lg:text-8xl font-bold tracking-wide text-white drop-shadow-2xl'
-                                                        : isTwentyFirstPage
+                                                        : isTwentiethPage
                                                           ? 'text-6xl md:text-7xl lg:text-8xl font-bold tracking-wide text-white drop-shadow-2xl'
-                                                          : isTwentySecondPage
+                                                          : isTwentyFirstPage
                                                             ? 'text-6xl md:text-7xl lg:text-8xl font-bold tracking-wide text-white drop-shadow-2xl'
-                                                            : isTwentyThirdPage
+                                                            : isTwentySecondPage
                                                               ? 'text-6xl md:text-7xl lg:text-8xl font-bold tracking-wide text-white drop-shadow-2xl'
-                                                              : isTwentyFourthPage
+                                                              : isTwentyThirdPage
                                                                 ? 'text-6xl md:text-7xl lg:text-8xl font-bold tracking-wide text-white drop-shadow-2xl'
-                                                                : isTwentyFifthPage
+                                                                : isTwentyFourthPage
                                                                   ? 'text-6xl md:text-7xl lg:text-8xl font-bold tracking-wide text-white drop-shadow-2xl'
-                                                                  : isTwentySixthPage
+                                                                  : isTwentyFifthPage
                                                                     ? 'text-6xl md:text-7xl lg:text-8xl font-bold tracking-wide text-white drop-shadow-2xl'
-                                                                    : isTwentySeventhPage
+                                                                    : isTwentySixthPage
                                                                       ? 'text-6xl md:text-7xl lg:text-8xl font-bold tracking-wide text-white drop-shadow-2xl'
-                                                                      : isTwentyEighthPage
+                                                                      : isTwentySeventhPage
                                                                         ? 'text-6xl md:text-7xl lg:text-8xl font-bold tracking-wide text-white drop-shadow-2xl'
-                                                                        : isTwentyNinthPage
+                                                                        : isTwentyEighthPage
                                                                           ? 'text-6xl md:text-7xl lg:text-8xl font-bold tracking-wide text-white drop-shadow-2xl'
-                                                                          : isThirtiethPage
+                                                                          : isTwentyNinthPage
                                                                             ? 'text-6xl md:text-7xl lg:text-8xl font-bold tracking-wide text-white drop-shadow-2xl'
-                                                                            : isThirtyFirstPage
+                                                                            : isThirtiethPage
                                                                               ? 'text-6xl md:text-7xl lg:text-8xl font-bold tracking-wide text-white drop-shadow-2xl'
-                                                                              : isThirtySecondPage
+                                                                              : isThirtyFirstPage
                                                                                 ? 'text-6xl md:text-7xl lg:text-8xl font-bold tracking-wide text-white drop-shadow-2xl'
-                                                                                : isThirtyThirdPage
+                                                                                : isThirtySecondPage
                                                                                   ? 'text-6xl md:text-7xl lg:text-8xl font-bold tracking-wide text-white drop-shadow-2xl'
-                                                                                  : isThirtyFourthPage
+                                                                                  : isThirtyThirdPage
                                                                                     ? 'text-6xl md:text-7xl lg:text-8xl font-bold tracking-wide text-white drop-shadow-2xl'
-                                                                                    : isThirtyFifthPage
+                                                                                    : isThirtyFourthPage
                                                                                       ? 'text-6xl md:text-7xl lg:text-8xl font-bold tracking-wide text-white drop-shadow-2xl'
-                                                                                      : isThirtySixthPage
+                                                                                      : isThirtyFifthPage
                                                                                         ? 'text-6xl md:text-7xl lg:text-8xl font-bold tracking-wide text-white drop-shadow-2xl'
+                                                                                        : isThirtySixthPage
+                                                                                          ? 'text-6xl md:text-7xl lg:text-8xl font-bold tracking-wide text-white drop-shadow-2xl'
                                                                                                                   : isThirtySeventhPage
                             ? 'text-6xl md:text-7xl lg:text-8xl font-bold tracking-wide text-white drop-shadow-2xl'
                             : isThirtyEighthPage
@@ -2810,39 +2864,39 @@ export default function Home() {
                                                                                                                : isContact 
                                                                                                             ? 'text-2xl md:text-3xl font-medium text-soft-gray'
                                                                                                             : 'text-3xl md:text-4xl font-normal leading-relaxed text-soft-gray'
-              } text-balance`}
-              style={isTitle ? {
-                textShadow: '0 0 30px rgba(0,0,0,0.8), 0 0 60px rgba(0,0,0,0.6), 0 0 90px rgba(0,0,0,0.4)'
-              } : isSecondPage ? {
-                textShadow: '0 0 25px rgba(0,0,0,0.7), 0 0 50px rgba(0,0,0,0.5), 0 0 75px rgba(0,0,0,0.3)'
-              } : isThirdPage ? {
-                textShadow: '0 0 20px rgba(0,0,0,0.7), 0 0 40px rgba(0,0,0,0.5), 0 0 60px rgba(0,0,0,0.3)'
-              } : isFourthPage ? {
-                textShadow: '0 0 18px rgba(0,0,0,0.7), 0 0 35px rgba(0,0,0,0.5), 0 0 50px rgba(0,0,0,0.3)'
-              } : isFifthPage ? {
-                textShadow: '0 0 18px rgba(0,0,0,0.7), 0 0 35px rgba(0,0,0,0.5), 0 0 50px rgba(0,0,0,0.3)'
-              } : isSixthPage ? {
-                textShadow: '0 0 18px rgba(0,0,0,0.7), 0 0 35px rgba(0,0,0,0.5), 0 0 50px rgba(0,0,0,0.3)'
-              } : isSeventhPage ? {
-                textShadow: '0 0 18px rgba(0,0,0,0.7), 0 0 35px rgba(0,0,0,0.5), 0 0 50px rgba(0,0,0,0.3)'
-              } : isEighthPage ? {
-                textShadow: '0 0 18px rgba(0,0,0,0.7), 0 0 35px rgba(0,0,0,0.5), 0 0 50px rgba(0,0,0,0.3)'
-              } : isNinthPage ? {
-                textShadow: '0 0 18px rgba(0,0,0,0.7), 0 0 35px rgba(0,0,0,0.5), 0 0 50px rgba(0,0,0,0.3)'
-              } : isTenthPage ? {
-                textShadow: '0 0 18px rgba(0,0,0,0.7), 0 0 35px rgba(0,0,0,0.5), 0 0 50px rgba(0,0,0,0.3)'
-              } : isEleventhPage ? {
-                textShadow: '0 0 18px rgba(0,0,0,0.7), 0 0 35px rgba(0,0,0,0.5), 0 0 50px rgba(0,0,0,0.3)'
-              } : isTwelfthPage ? {
-                textShadow: '0 0 18px rgba(0,0,0,0.7), 0 0 35px rgba(0,0,0,0.5), 0 0 50px rgba(0,0,0,0.3)'
-              } : isThirteenthPage ? {
-                textShadow: '0 0 18px rgba(0,0,0,0.7), 0 0 35px rgba(0,0,0,0.5), 0 0 50px rgba(0,0,0,0.3)'
-              } : isFourteenthPage ? {
-                textShadow: '0 0 18px rgba(0,0,0,0.7), 0 0 35px rgba(0,0,0,0.5), 0 0 50px rgba(0,0,0,0.3)'
-              } : isFifteenthPage ? {
-                textShadow: '0 0 18px rgba(0,0,0,0.7), 0 0 35px rgba(0,0,0,0.5), 0 0 50px rgba(0,0,0,0.3)'
-              } : isSixteenthPage ? {
-                textShadow: '0 0 18px rgba(0,0,0,0.7), 0 0 35px rgba(0,0,0,0.5), 0 0 50px rgba(0,0,0,0.3)'
+                  } text-balance`}
+                style={isTitle ? {
+                  textShadow: '0 0 30px rgba(0,0,0,0.8), 0 0 60px rgba(0,0,0,0.6), 0 0 90px rgba(0,0,0,0.4)'
+                } : isSecondPage ? {
+                  textShadow: '0 0 25px rgba(0,0,0,0.7), 0 0 50px rgba(0,0,0,0.5), 0 0 75px rgba(0,0,0,0.3)'
+                } : isThirdPage ? {
+                  textShadow: '0 0 20px rgba(0,0,0,0.7), 0 0 40px rgba(0,0,0,0.5), 0 0 60px rgba(0,0,0,0.3)'
+                } : isFourthPage ? {
+                  textShadow: '0 0 18px rgba(0,0,0,0.7), 0 0 35px rgba(0,0,0,0.5), 0 0 50px rgba(0,0,0,0.3)'
+                } : isFifthPage ? {
+                  textShadow: '0 0 18px rgba(0,0,0,0.7), 0 0 35px rgba(0,0,0,0.5), 0 0 50px rgba(0,0,0,0.3)'
+                } : isSixthPage ? {
+                  textShadow: '0 0 18px rgba(0,0,0,0.7), 0 0 35px rgba(0,0,0,0.5), 0 0 50px rgba(0,0,0,0.3)'
+                } : isSeventhPage ? {
+                  textShadow: '0 0 18px rgba(0,0,0,0.7), 0 0 35px rgba(0,0,0,0.5), 0 0 50px rgba(0,0,0,0.3)'
+                } : isEighthPage ? {
+                  textShadow: '0 0 18px rgba(0,0,0,0.7), 0 0 35px rgba(0,0,0,0.5), 0 0 50px rgba(0,0,0,0.3)'
+                } : isNinthPage ? {
+                  textShadow: '0 0 18px rgba(0,0,0,0.7), 0 0 35px rgba(0,0,0,0.5), 0 0 50px rgba(0,0,0,0.3)'
+                } : isTenthPage ? {
+                  textShadow: '0 0 18px rgba(0,0,0,0.7), 0 0 35px rgba(0,0,0,0.5), 0 0 50px rgba(0,0,0,0.3)'
+                } : isEleventhPage ? {
+                  textShadow: '0 0 18px rgba(0,0,0,0.7), 0 0 35px rgba(0,0,0,0.5), 0 0 50px rgba(0,0,0,0.3)'
+                } : isTwelfthPage ? {
+                  textShadow: '0 0 18px rgba(0,0,0,0.7), 0 0 35px rgba(0,0,0,0.5), 0 0 50px rgba(0,0,0,0.3)'
+                } : isThirteenthPage ? {
+                  textShadow: '0 0 18px rgba(0,0,0,0.7), 0 0 35px rgba(0,0,0,0.5), 0 0 50px rgba(0,0,0,0.3)'
+                } : isFourteenthPage ? {
+                  textShadow: '0 0 18px rgba(0,0,0,0.7), 0 0 35px rgba(0,0,0,0.5), 0 0 50px rgba(0,0,0,0.3)'
+                } : isFifteenthPage ? {
+                  textShadow: '0 0 18px rgba(0,0,0,0.7), 0 0 35px rgba(0,0,0,0.5), 0 0 50px rgba(0,0,0,0.3)'
+                } : isSixteenthPage ? {
+                  textShadow: '0 0 18px rgba(0,0,0,0.7), 0 0 35px rgba(0,0,0,0.5), 0 0 50px rgba(0,0,0,0.3)'
                               } : isSeventeenthPage ? {
                   textShadow: '0 0 25px rgba(0,0,0,0.8), 0 0 50px rgba(0,0,0,0.6), 0 0 75px rgba(0,0,0,0.4)'
               } : isEighteenthPage ? {
@@ -2906,103 +2960,122 @@ export default function Home() {
               } : isContact ? {
                 textShadow: '0 0 18px rgba(0,0,0,0.7), 0 0 35px rgba(0,0,0,0.5), 0 0 50px rgba(0,0,0,0.3)'
               } : undefined}
-            >
-              {isTitle ? renderTitleWithHighlight(currentSentence) : 
-               isThirdPage ? renderThirdPageWithHighlight(currentSentence) : 
-               isFourthPage ? renderFourthPageWithHighlight(currentSentence) :
-               isFifthPage ? renderFifthPageWithHighlight(currentSentence) :
-               isSixthPage ? renderSixthPageWithHighlight(currentSentence) :
-               isSeventhPage ? renderSeventhPageWithHighlight(currentSentence) :
-               isEighthPage ? renderEighthPageWithHighlight(currentSentence) :
-                               isNinthPage ? renderNinthPageWithHighlight(currentSentence) :
-               isTenthPage ? renderTenthPageWithHighlight(currentSentence) :
-               isEleventhPage ? renderEleventhPageWithHighlight(currentSentence) :
-               isTwelfthPage ? renderTwelfthPageWithHighlight(currentSentence) :
-               isThirteenthPage ? renderThirteenthPageWithHighlight(currentSentence) :
-               isFourteenthPage ? renderFourteenthPageWithHighlight(currentSentence) :
-               isFifteenthPage ? renderFifteenthPageWithHighlight(currentSentence) :
-               isSixteenthPage ? renderSixteenthPageWithHighlight(currentSentence) :
-               isSeventeenthPage ? renderSeventeenthPageWithHighlight(currentSentence) :
-               isEighteenthPage ? renderEighteenthPageWithHighlight(currentSentence) :
-               isNineteenthPage ? renderNineteenthPageWithHighlight(currentSentence) :
-               isTwentiethPage ? renderTwentiethPageWithHighlight(currentSentence) :
-               isTwentyFirstPage ? renderTwentyFirstPageWithHighlight(currentSentence) :
-               isTwentySecondPage ? renderTwentySecondPageWithHighlight(currentSentence) :
-               isTwentyThirdPage ? renderTwentyThirdPageWithHighlight(currentSentence) :
-               isTwentyFourthPage ? renderTwentyFourthPageWithHighlight(currentSentence) :
-               isTwentyFifthPage ? renderTwentyFifthPageWithHighlight(currentSentence) :
-               isTwentySixthPage ? renderTwentySixthPageWithHighlight(currentSentence) :
-               isTwentySeventhPage ? renderTwentySeventhPageWithHighlight(currentSentence) :
-               isTwentyEighthPage ? renderTwentyEighthPageWithHighlight(currentSentence) :
-               isTwentyNinthPage ? renderTwentyNinthPageWithHighlight(currentSentence) :
-               isThirtiethPage ? renderThirtiethPageWithHighlight(currentSentence) :
-               isThirtyFirstPage ? renderThirtyFirstPageWithHighlight(currentSentence) :
-               isThirtySecondPage ? renderThirtySecondPageWithHighlight(currentSentence) :
-               isThirtyThirdPage ? renderThirtyThirdPageWithHighlight(currentSentence) :
-               isThirtyFourthPage ? renderThirtyFourthPageWithHighlight(currentSentence) :
-               isThirtyFifthPage ? renderThirtyFifthPageWithHighlight(currentSentence) :
-               isThirtySixthPage ? renderThirtySixthPageWithHighlight(currentSentence) :
-                                isThirtySeventhPage ? currentSentence :
-                 isThirtyEighthPage ? currentSentence :
-                 isThirtyNinthPage ? currentSentence :
-                 isFortiethPage ? currentSentence :
-                 isFortyFirstPage ? renderFortyFirstPageWithHighlight(currentSentence) :
-                 isFortySecondPage ? renderFortySecondPageWithHighlight(currentSentence) :
-                 isFortyThirdPage ? renderFortyThirdPageWithHighlight(currentSentence) :
-                                    isFortyFourthPage ? renderFortyFourthPageWithHighlight(currentSentence) :
-                   isFortyFifthPage ? renderFortyFifthPageWithHighlight(currentSentence) :
-                   isFortySixthPage ? renderFortySixthPageWithHighlight(currentSentence) :
-               currentSentence}
-            </motion.div>
-            
-            {/* Special styling for prayer section - removed duplicate rendering for 37th page */}
-          </motion.section>
-        </AnimatePresence>
+              >
+                {isTitle ? renderTitleWithHighlight(currentSentence) : 
+                 isThirdPage ? renderThirdPageWithHighlight(currentSentence) : 
+                 isFourthPage ? renderFourthPageWithHighlight(currentSentence) :
+                 isFifthPage ? renderFifthPageWithHighlight(currentSentence) :
+                 isSixthPage ? renderSixthPageWithHighlight(currentSentence) :
+                 isSeventhPage ? renderSeventhPageWithHighlight(currentSentence) :
+                 isEighthPage ? renderEighthPageWithHighlight(currentSentence) :
+                                 isNinthPage ? renderNinthPageWithHighlight(currentSentence) :
+                 isTenthPage ? renderTenthPageWithHighlight(currentSentence) :
+                 isEleventhPage ? renderEleventhPageWithHighlight(currentSentence) :
+                 isTwelfthPage ? renderTwelfthPageWithHighlight(currentSentence) :
+                 isThirteenthPage ? renderThirteenthPageWithHighlight(currentSentence) :
+                 isFourteenthPage ? renderFourteenthPageWithHighlight(currentSentence) :
+                 isFifteenthPage ? renderFifteenthPageWithHighlight(currentSentence) :
+                 isSixteenthPage ? renderSixteenthPageWithHighlight(currentSentence) :
+                 isSeventeenthPage ? renderSeventeenthPageWithHighlight(currentSentence) :
+                 isEighteenthPage ? renderEighteenthPageWithHighlight(currentSentence) :
+                 isNineteenthPage ? renderNineteenthPageWithHighlight(currentSentence) :
+                 isTwentiethPage ? renderTwentiethPageWithHighlight(currentSentence) :
+                 isTwentyFirstPage ? renderTwentyFirstPageWithHighlight(currentSentence) :
+                 isTwentySecondPage ? renderTwentySecondPageWithHighlight(currentSentence) :
+                 isTwentyThirdPage ? renderTwentyThirdPageWithHighlight(currentSentence) :
+                 isTwentyFourthPage ? renderTwentyFourthPageWithHighlight(currentSentence) :
+                 isTwentyFifthPage ? renderTwentyFifthPageWithHighlight(currentSentence) :
+                 isTwentySixthPage ? renderTwentySixthPageWithHighlight(currentSentence) :
+                 isTwentySeventhPage ? renderTwentySeventhPageWithHighlight(currentSentence) :
+                 isTwentyEighthPage ? renderTwentyEighthPageWithHighlight(currentSentence) :
+                 isTwentyNinthPage ? renderTwentyNinthPageWithHighlight(currentSentence) :
+                 isThirtiethPage ? renderThirtiethPageWithHighlight(currentSentence) :
+                 isThirtyFirstPage ? renderThirtyFirstPageWithHighlight(currentSentence) :
+                 isThirtySecondPage ? renderThirtySecondPageWithHighlight(currentSentence) :
+                 isThirtyThirdPage ? renderThirtyThirdPageWithHighlight(currentSentence) :
+                 isThirtyFourthPage ? renderThirtyFourthPageWithHighlight(currentSentence) :
+                 isThirtyFifthPage ? renderThirtyFifthPageWithHighlight(currentSentence) :
+                 isThirtySixthPage ? renderThirtySixthPageWithHighlight(currentSentence) :
+                                  isThirtySeventhPage ? currentSentence :
+                   isThirtyEighthPage ? currentSentence :
+                   isThirtyNinthPage ? currentSentence :
+                   isFortiethPage ? currentSentence :
+                   isFortyFirstPage ? renderFortyFirstPageWithHighlight(currentSentence) :
+                   isFortySecondPage ? renderFortySecondPageWithHighlight(currentSentence) :
+                   isFortyThirdPage ? renderFortyThirdPageWithHighlight(currentSentence) :
+                                      isFortyFourthPage ? renderFortyFourthPageWithHighlight(currentSentence) :
+                     isFortyFifthPage ? renderFortyFifthPageWithHighlight(currentSentence) :
+                     isFortySixthPage ? renderFortySixthPageWithHighlight(currentSentence) :
+                 currentSentence}
+              </motion.div>
+              
+              {/* Special styling for prayer section - removed duplicate rendering for 37th page */}
+            </motion.section>
+          </AnimatePresence>
 
-        {/* Navigation hints - REMOVED */}
-      </main>
+          {/* Navigation hints - REMOVED */}
+        </main>
 
-      {/* Bottom controls - Three round buttons */}
-      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex items-center gap-4">
-        {/* Restart button - Icon only */}
-        {!isFirst && (
-          <motion.button
-            onClick={goToFirst}
-            className="w-12 h-12 rounded-full bg-white/20 text-gentle-gray hover:bg-white/30 transition-all duration-300 backdrop-blur-sm border border-white/20 flex items-center justify-center"
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.2, duration: 0.6 }}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            title="Restart from beginning"
+
+
+        {/* Mobile navigation hint */}
+        {showMobileHint && (
+          <motion.div
+            className="absolute top-4 left-1/2 -translate-x-1/2 z-30 bg-black/80 text-white px-4 py-2 rounded-lg text-sm font-medium backdrop-blur-sm"
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.5 }}
           >
-            <svg 
-              className="w-5 h-5" 
-              fill="none" 
-              stroke="currentColor" 
-              viewBox="0 0 24 24"
-            >
-              <path 
-                strokeLinecap="round" 
-                strokeLinejoin="round" 
-                strokeWidth={2} 
-                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" 
-              />
-            </svg>
-          </motion.button>
+            <div className="flex items-center gap-2">
+              <span>👆 Swipe up/down or left/right to navigate</span>
+            </div>
+          </motion.div>
         )}
-        
-        {/* Audio control button */}
-        <AudioToggle 
-          enabled={audioEnabled} 
-          onToggle={handleAudioToggle} 
-        />
-        
-        {/* Share button - Always visible */}
-        <ShareButton />
+
+        {/* Bottom controls - Three round buttons */}
+        <div className="absolute bottom-4 sm:bottom-6 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 sm:gap-4">
+          {/* Restart button - Icon only */}
+          {!isFirst && (
+            <motion.button
+              onClick={goToFirst}
+              className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white/20 text-gentle-gray hover:bg-white/30 transition-all duration-300 backdrop-blur-sm border border-white/20 flex items-center justify-center"
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.2, duration: 0.6 }}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              title="Restart from beginning"
+            >
+              <svg 
+                className="w-4 h-4 sm:w-5 sm:h-5" 
+                fill="none" 
+                stroke="currentColor" 
+                viewBox="0 0 24 24"
+              >
+                <path 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round" 
+                  strokeWidth={2} 
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" 
+                />
+              </svg>
+            </motion.button>
+          )}
+          
+          {/* Audio control button */}
+          <AudioToggle 
+            enabled={audioEnabled} 
+            onToggle={handleAudioToggle} 
+          />
+          
+          {/* Share button - Always visible */}
+          <ShareButton />
+        </div>
+
+
       </div>
-
-
-    </div>
+    </>
   )
 }
+

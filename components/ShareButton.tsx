@@ -44,14 +44,14 @@ export function ShareButton() {
       onClick={handleShare}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      className="relative w-12 h-12 rounded-full bg-white/20 text-gentle-gray hover:bg-white/30 transition-all duration-300 backdrop-blur-sm border border-white/20 flex items-center justify-center"
+      className="relative w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white/20 text-gentle-gray hover:bg-white/30 transition-all duration-300 backdrop-blur-sm border border-white/20 flex items-center justify-center"
       whileHover={{ scale: 1.05 }}
       whileTap={{ scale: 0.95 }}
       title="Share this experience"
     >
       {/* Share icon */}
       <svg 
-        className="w-5 h-5" 
+        className="w-4 h-4 sm:w-5 sm:h-5" 
         fill="none" 
         stroke="currentColor" 
         viewBox="0 0 24 24"
