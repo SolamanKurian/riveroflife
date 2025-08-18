@@ -6,7 +6,7 @@
 
 @layer base {
   html {
-    scroll-behavior: smooth;
+    scroll-behavior: auto;
   }
   
   body {
@@ -33,7 +33,70 @@
   }
 }
 
-/* Mobile-specific optimizations */
+/* Background image transitions with small zoom effect */
+.background-image {
+  transition: opacity 1.5s cubic-bezier(0.4, 0, 0.2, 1), transform 1.5s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+/* Content text transitions with movement effects */
+.content-text {
+  transition: opacity 1.5s cubic-bezier(0.4, 0, 0.2, 1), transform 1.5s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+/* Animated highlighted text with moving effect */
+.highlighted-text {
+  animation: highlightFloat 3s ease-in-out infinite !important;
+  display: inline-block !important;
+}
+
+/* Keyframes for highlighted text movement */
+@keyframes highlightFloat {
+  0%, 100% {
+    transform: translateY(0px) scale(1);
+  }
+  25% {
+    transform: translateY(-8px) scale(1.05);
+  }
+  50% {
+    transform: translateY(-4px) scale(1.02);
+  }
+  75% {
+    transform: translateY(-6px) scale(1.03);
+  }
+}
+
+/* Disable all other animations and transitions */
+* {
+  animation: none !important;
+  transition-delay: 0s !important;
+  animation-delay: 0s !important;
+}
+
+/* Force instant rendering for images and content */
+img, .content-text {
+  opacity: 1 !important;
+  visibility: visible !important;
+  display: block !important;
+}
+
+/* Disable all transforms except for our custom animations */
+* {
+  filter: none !important;
+  backdrop-filter: none !important;
+}
+
+/* Override any Tailwind or CSS-in-JS animations except our custom ones */
+[class*="animate-"]:not(.background-image):not(.content-text):not(.highlighted-text) {
+  animation: none !important;
+  transition: none !important;
+}
+
+/* Ensure scroll behavior is instant */
+html {
+  scroll-behavior: auto !important;
+}
+
+/* Enhanced Mobile-specific optimizations */
 @layer base {
   /* Prevent text selection on mobile */
   * {
@@ -53,21 +116,23 @@
     user-select: text;
   }
   
-  /* Improve touch targets on mobile */
+  /* Enhanced touch targets for mobile */
   button, [role="button"] {
-    min-height: 44px;
-    min-width: 44px;
+    min-height: 48px;
+    min-width: 48px;
   }
   
-  /* Optimize for mobile viewport */
-  @media (max-width: 640px) {
+  /* Mobile-first responsive design */
+  @media (max-width: 768px) {
+    /* Optimize font sizes for mobile */
     html {
-      font-size: 14px;
+      font-size: 16px;
     }
     
     body {
       -webkit-text-size-adjust: 100%;
       -ms-text-size-adjust: 100%;
+      line-height: 1.6;
     }
     
     /* Prevent zoom on double-tap */
@@ -75,16 +140,240 @@
       font-size: 16px;
     }
     
-    /* Improve touch scrolling */
+    /* Enhanced touch scrolling */
     .touch-scroll {
       -webkit-overflow-scrolling: touch;
       overflow-scrolling: touch;
+      scroll-behavior: smooth;
+    }
+    
+    /* Mobile-optimized text shadows */
+    .content-text {
+      text-shadow: 0 2px 4px rgba(0,0,0,0.8) !important;
+    }
+    
+    /* Mobile-optimized highlighted text */
+    .highlighted-text {
+      animation: highlightFloatMobile 2.5s ease-in-out infinite !important;
+    }
+    
+    /* Mobile-specific keyframes for smoother performance */
+    @keyframes highlightFloatMobile {
+      0%, 100% {
+        transform: translateY(0px) scale(1);
+      }
+      25% {
+        transform: translateY(-6px) scale(1.03);
+      }
+      50% {
+        transform: translateY(-3px) scale(1.01);
+      }
+      75% {
+        transform: translateY(-4px) scale(1.02);
+      }
+    }
+    
+    /* Enhanced mobile text content styling */
+    .mobile-text-content {
+      padding: 0 1.5rem !important;
+      max-width: 90vw !important;
+      text-align: center !important;
+    }
+    
+    /* Mobile-optimized title text */
+    .mobile-title-text {
+      font-size: clamp(3rem, 9vw, 4.5rem) !important;
+      line-height: 1.1 !important;
+      letter-spacing: 0.05em !important;
+      margin-bottom: 1rem !important;
+    }
+    
+    /* Mobile-optimized large text */
+    .mobile-large-text {
+      font-size: clamp(2.5rem, 8vw, 4rem) !important;
+      line-height: 1.15 !important;
+      letter-spacing: 0.03em !important;
+      margin-bottom: 0.75rem !important;
+    }
+    
+    /* Mobile-optimized medium text */
+    .mobile-medium-text {
+      font-size: clamp(2rem, 7vw, 3rem) !important;
+      line-height: 1.2 !important;
+      letter-spacing: 0.02em !important;
+      margin-bottom: 0.5rem !important;
+    }
+    
+    /* Mobile-optimized small text */
+    .mobile-small-text {
+      font-size: clamp(1.5rem, 6vw, 2.5rem) !important;
+      line-height: 1.4 !important;
+      letter-spacing: 0.01em !important;
+      margin-bottom: 0.5rem !important;
+    }
+    
+    /* Mobile-optimized contact text */
+    .mobile-contact-text {
+      font-size: clamp(1.375rem, 5.5vw, 2rem) !important;
+      line-height: 1.5 !important;
+      letter-spacing: 0.005em !important;
+      margin-bottom: 0.5rem !important;
+    }
+    
+    /* Enhanced mobile text container */
+    .mobile-text-container {
+      display: flex !important;
+      flex-direction: column !important;
+      justify-content: center !important;
+      align-items: center !important;
+      min-height: 100vh !important;
+      padding: 2rem 1rem !important;
+      box-sizing: border-box !important;
+    }
+    
+    /* Mobile text spacing improvements */
+    .mobile-text-spacing {
+      margin: 0.5rem 0 !important;
+      padding: 0.25rem 0 !important;
+    }
+    
+    /* Mobile question mark styling */
+    .mobile-question-mark {
+      font-size: clamp(3rem, 10vw, 5rem) !important;
+      line-height: 1 !important;
+      margin: 0 0.25rem !important;
+      display: inline-block !important;
+    }
+  }
+  
+  /* Small mobile devices */
+  @media (max-width: 480px) {
+    html {
+      font-size: 14px;
+    }
+    
+    /* Even larger touch targets for small screens */
+    button, [role="button"] {
+      min-height: 52px;
+      min-width: 52px;
+    }
+    
+    /* Optimize spacing for small screens */
+    .content-text {
+      padding: 0 1rem;
+    }
+    
+    /* Enhanced small mobile text */
+    .mobile-text-container {
+      padding: 1.5rem 0.75rem !important;
+    }
+    
+    .mobile-text-content {
+      padding: 0 1rem !important;
+      max-width: 95vw !important;
+    }
+    
+    /* Small mobile text adjustments */
+    .mobile-title-text {
+      font-size: clamp(2.5rem, 8vw, 4rem) !important;
+      margin-bottom: 0.75rem !important;
+    }
+    
+    .mobile-large-text {
+      font-size: clamp(2.25rem, 7vw, 3.5rem) !important;
+      margin-bottom: 0.5rem !important;
+    }
+    
+    .mobile-medium-text {
+      font-size: clamp(1.75rem, 6vw, 2.75rem) !important;
+      margin-bottom: 0.5rem !important;
+    }
+    
+    .mobile-small-text {
+      font-size: clamp(1.5rem, 5.5vw, 2.25rem) !important;
+      margin-bottom: 0.5rem !important;
+    }
+    
+    .mobile-contact-text {
+      font-size: clamp(1.25rem, 5vw, 1.75rem) !important;
+      margin-bottom: 0.5rem !important;
+    }
+    
+    .mobile-question-mark {
+      font-size: clamp(2.5rem, 8vw, 4rem) !important;
+      margin: 0 0.2rem !important;
+    }
+  }
+  
+  /* Extra small mobile devices */
+  @media (max-width: 360px) {
+    .mobile-text-container {
+      padding: 1rem 0.5rem !important;
+    }
+    
+    .mobile-text-content {
+      padding: 0 0.75rem !important;
+      max-width: 98vw !important;
+    }
+    
+    .mobile-title-text {
+      font-size: clamp(2.25rem, 7vw, 3.5rem) !important;
+    }
+    
+    .mobile-large-text {
+      font-size: clamp(2rem, 6.5vw, 3rem) !important;
+    }
+    
+    .mobile-medium-text {
+      font-size: clamp(1.625rem, 5.5vw, 2.5rem) !important;
+    }
+    
+    .mobile-small-text {
+      font-size: clamp(1.375rem, 5vw, 2rem) !important;
+    }
+    
+    .mobile-contact-text {
+      font-size: clamp(1.125rem, 4.5vw, 1.5rem) !important;
+    }
+    
+    .mobile-question-mark {
+      font-size: clamp(2rem, 7vw, 3.5rem) !important;
     }
   }
   
   /* Prevent zoom on double-tap for all devices */
   * {
     touch-action: manipulation;
+  }
+  
+  /* Mobile-specific navigation improvements */
+  @media (max-width: 768px) {
+    /* Enhanced mobile navigation buttons */
+    .mobile-nav-button {
+      background: rgba(255, 255, 255, 0.25) !important;
+      backdrop-filter: blur(10px) !important;
+      border: 2px solid rgba(255, 255, 255, 0.3) !important;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+    }
+    
+    /* Mobile-optimized section indicator */
+    .mobile-section-indicator {
+      background: rgba(0, 0, 0, 0.6) !important;
+      backdrop-filter: blur(15px) !important;
+      border: 1px solid rgba(255, 255, 255, 0.2) !important;
+      font-size: 0.875rem !important;
+      padding: 0.5rem 0.75rem !important;
+    }
+    
+    /* Mobile-optimized mobile hint */
+    .mobile-hint {
+      background: rgba(0, 0, 0, 0.85) !important;
+      backdrop-filter: blur(20px) !important;
+      border: 1px solid rgba(255, 255, 255, 0.15) !important;
+      font-size: 0.875rem !important;
+      padding: 0.75rem 1rem !important;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4) !important;
+    }
   }
 }
 
