@@ -113,51 +113,32 @@ export default function Home() {
 
   // Image fading navigation to section
   const goToSection = useCallback((sectionIndex: number, direction: 'next' | 'prev' | null = null) => {
-    console.log(`🎯 goToSection called: ${sectionIndex}, direction: ${direction}, currentSection: ${currentSection}, isTransitioning: ${isTransitioning}`)
-    
     // Immediately change the section for instant navigation
     setCurrentSection(sectionIndex)
-    
+
     // Set transition state for visual effects
     setTransitionDirection(direction)
     setIsTransitioning(true)
-    
-    console.log(`🚀 Navigation completed instantly, starting visual transition`)
-    
-    // Complete visual transition after animation (increased to 4.5s for very slow movement)
+
+    // Complete visual transition after animation (smooth 2s transitions)
     setTimeout(() => {
-      console.log(`✅ Visual transition completed for section ${sectionIndex}`)
       setIsTransitioning(false)
       setTransitionDirection(null)
-    }, 4500) // Increased from 1500ms to 4500ms for very slow movement
-  }, [isTransitioning, currentSection])
+    }, 2000) // Smooth 2s transitions for better user experience
+  }, [])
 
   // Keyboard navigation
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (e.key === 'ArrowDown' || e.key === 'PageDown') {
+    if (e.key === 'ArrowDown' || e.key === ' ') {
       e.preventDefault()
       if (currentSection < PAGES_DATA.length - 1) {
-        console.log(`⌨️ Keyboard navigation: Next section (${currentSection + 1})`)
         goToSection(currentSection + 1, 'next')
-      } else {
-        console.log(`⚠️ Already at last section (${currentSection + 1}/${PAGES_DATA.length})`)
       }
-    } else if (e.key === 'ArrowUp' || e.key === 'PageUp') {
+    } else if (e.key === 'ArrowUp') {
       e.preventDefault()
       if (currentSection > 0) {
-        console.log(`⌨️ Keyboard navigation: Previous section (${currentSection - 1})`)
         goToSection(currentSection - 1, 'prev')
-      } else {
-        console.log(`⚠️ Already at first section (${currentSection + 1}/${PAGES_DATA.length})`)
       }
-    } else if (e.key === 'Home') {
-      e.preventDefault()
-      console.log(`⌨️ Keyboard navigation: Home (section 0)`)
-      goToSection(0, 'prev')
-    } else if (e.key === 'End') {
-      e.preventDefault()
-      console.log(`⌨️ Keyboard navigation: End (section ${PAGES_DATA.length - 1})`)
-      goToSection(PAGES_DATA.length - 1, 'next')
     }
   }, [currentSection, goToSection])
 
@@ -186,25 +167,28 @@ export default function Home() {
     if (Math.abs(diffX) > Math.abs(diffY)) {
       if (Math.abs(diffX) > minSwipeDistance) {
         // Horizontal swipe - could be used for additional navigation
-        console.log(`👆 Horizontal swipe detected: ${diffX > 0 ? 'left' : 'right'}`)
+        // Start audio on horizontal swipe
+        if (audioElement && audioElement.paused && audioEnabled) {
+          audioElement.play().catch(console.error)
+        }
       }
     } else {
       if (Math.abs(diffY) > minSwipeDistance) {
         const direction = diffY > 0 ? 'next' : 'prev'
-        console.log(`👆 Vertical swipe detected: ${direction} (diff: ${diffY})`)
         
         if (direction === 'next' && currentSection < PAGES_DATA.length - 1) {
-          console.log(`👆 Swipe navigation: Next section (${currentSection + 1})`)
           goToSection(currentSection + 1, 'next')
         } else if (direction === 'prev' && currentSection > 0) {
-          console.log(`👆 Swipe navigation: Previous section (${currentSection - 1})`)
           goToSection(currentSection - 1, 'prev')
-        } else {
-          console.log(`⚠️ Swipe navigation blocked: ${direction} not available`)
+        }
+        
+        // Start audio on vertical swipe
+        if (audioElement && audioElement.paused && audioEnabled) {
+          audioElement.play().catch(console.error)
         }
       }
     }
-  }, [currentSection, goToSection])
+  }, [currentSection, goToSection, audioElement, audioEnabled])
 
   // Event listeners
   useEffect(() => {
@@ -329,14 +313,14 @@ export default function Home() {
   return (
     <div 
       ref={containerRef}
-      className="relative w-screen h-screen overflow-hidden"
+      className={`relative w-screen h-screen overflow-hidden ${isTransitioning ? 'bg-black' : ''}`}
     >
       {/* Background Image - Fading + Small Zoom Transition */}
       <div className="absolute inset-0 z-0 w-screen h-screen">
         <img
           src={currentPage.backgroundImage}
           alt={`Background for section ${currentSection + 1}`}
-          className="w-screen h-screen object-cover background-image"
+          className={`w-screen h-screen object-cover background-image ${isTransitioning ? 'transitioning' : ''}`}
           style={{ 
             width: '100vw', 
             height: '100vh', 
@@ -345,13 +329,7 @@ export default function Home() {
             top: 0,
             left: 0,
             right: 0,
-            bottom: 0,
-            opacity: isTransitioning ? 0.3 : 1,
-            transform: isTransitioning 
-              ? transitionDirection === 'next' 
-                ? 'scale(1.05)' 
-                : 'scale(1.05)'
-              : 'scale(1)'
+            bottom: 0
           }}
           loading="eager"
           decoding="sync"
@@ -376,7 +354,9 @@ export default function Home() {
               currentPage.textSize === 'title' ? 'text-white' : 
               currentPage.textSize === 'contact' ? 'text-soft-gray' : 
               'text-white'
-            } drop-shadow-2xl text-balance font-bold mobile-text-spacing`}
+            } drop-shadow-2xl text-balance font-bold mobile-text-spacing ${
+              isTransitioning ? `transitioning ${transitionDirection === 'prev' ? 'prev' : ''}` : ''
+            }`}
             style={{
               textShadow: currentPage.textSize === 'title' 
                 ? '0 0 30px rgba(0,0,0,0.8), 0 0 60px rgba(0,0,0,0.6), 0 0 90px rgba(0,0,0,0.4)'
@@ -384,13 +364,7 @@ export default function Home() {
                 ? '0 0 25px rgba(0,0,0,0.8), 0 0 50px rgba(0,0,0,0.6), 0 0 75px rgba(0,0,0,0.4)'
                 : currentPage.textSize === 'medium'
                 ? '0 0 20px rgba(0,0,0,0.8), 0 0 40px rgba(0,0,0,0.6), 0 0 60px rgba(0,0,0,0.4)'
-                : '0 0 18px rgba(0,0,0,0.7), 0 0 35px rgba(0,0,0,0.5), 0 0 50px rgba(0,0,0,0.3)',
-              opacity: isTransitioning ? 0.6 : 1,
-              transform: isTransitioning 
-                ? transitionDirection === 'next' 
-                  ? 'translateY(30px) scale(0.95)' 
-                  : 'translateY(-30px) scale(0.95)'
-                : 'translateY(0) scale(1)'
+                : '0 0 18px rgba(0,0,0,0.7), 0 0 35px rgba(0,0,0,0.5), 0 0 50px rgba(0,0,0,0.3)'
             }}
           >
             {currentPage.specialStyling === 'question' 
@@ -402,12 +376,11 @@ export default function Home() {
       </div>
 
       {/* Navigation Controls - Moved up for mobile */}
-      <div className="absolute bottom-12 sm:bottom-6 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 sm:gap-4 mobile-nav-container">
+      <div className="absolute bottom-16 sm:bottom-6 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 sm:gap-4 mobile-nav-container">
         {/* Previous button */}
         {currentSection > 0 && (
           <button
             onClick={() => {
-              console.log(`🔄 Navigating to previous section: ${currentSection - 1} (current: ${currentSection})`)
               goToSection(currentSection - 1, 'prev')
             }}
             className="w-12 h-12 sm:w-12 sm:h-12 rounded-full bg-white/20 text-white hover:bg-white/30 backdrop-blur-sm border border-white/20 flex items-center justify-center transition-all duration-300 hover:scale-110 mobile-nav-button"
@@ -433,7 +406,6 @@ export default function Home() {
         {currentSection > 0 && (
           <button
             onClick={() => {
-              console.log(`🔄 Restarting to section 0 (current: ${currentSection})`)
               goToSection(0, 'prev')
             }}
             className="w-12 h-12 sm:w-12 sm:h-12 rounded-full bg-white/20 text-white hover:bg-white/30 backdrop-blur-sm border border-white/20 flex items-center justify-center transition-all duration-300 hover:scale-110 mobile-nav-button"
@@ -468,7 +440,6 @@ export default function Home() {
         {currentSection < PAGES_DATA.length - 1 && (
           <button
             onClick={() => {
-              console.log(`🔄 Navigating to next section: ${currentSection + 1} (current: ${currentSection}, total: ${PAGES_DATA.length})`)
               goToSection(currentSection + 1, 'next')
             }}
             className="w-12 h-12 sm:w-12 sm:h-12 rounded-full bg-white/20 text-white hover:bg-white/30 backdrop-blur-sm border border-white/20 flex items-center justify-center transition-all duration-300 hover:scale-110 mobile-nav-button"

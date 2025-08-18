@@ -33,14 +33,53 @@
   }
 }
 
-/* Background image transitions with very slow small zoom effect */
+/* Background image transitions with smooth small zoom effect */
 .background-image {
-  transition: opacity 4.5s cubic-bezier(0.4, 0, 0.2, 1), transform 4.5s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  transition: opacity 2s cubic-bezier(0.25, 0.46, 0.45, 0.94), transform 2s cubic-bezier(0.25, 0.46, 0.45, 0.94) !important;
+  will-change: opacity, transform !important;
 }
 
-/* Content text transitions with very slow movement effects */
+/* Smooth image transitions when transitioning state is active */
+img.background-image.transitioning,
+.background-image.transitioning {
+  opacity: 0.7 !important;
+  transform: scale(1.02) !important;
+}
+
+/* Force black background during transitions */
+img.background-image.transitioning {
+  background-color: black !important;
+}
+
+/* Ensure black background during transitions for the entire container */
+.background-image.transitioning {
+  background-color: black !important;
+}
+
+/* Force black background on the page during transitions */
+body:has(.background-image.transitioning),
+html:has(.background-image.transitioning) {
+  background-color: black !important;
+}
+
+/* Content text transitions with smooth movement effects */
 .content-text {
-  transition: opacity 4.5s cubic-bezier(0.4, 0, 0.2, 1), transform 4.5s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  transition: opacity 2s cubic-bezier(0.25, 0.46, 0.45, 0.94), transform 2s cubic-bezier(0.25, 0.46, 0.45, 0.94) !important;
+  will-change: opacity, transform !important;
+}
+
+/* Smooth text transitions when transitioning state is active */
+div.content-text.transitioning,
+.content-text.transitioning {
+  opacity: 0.8 !important;
+  transform: translateY(15px) scale(0.98) !important;
+  color: white !important;
+}
+
+.content-text.transitioning.prev {
+  transform: translateY(-15px) scale(0.98) !important;
+  opacity: 0.8 !important;
+  color: white !important;
 }
 
 /* Animated highlighted text with moving effect */
@@ -74,7 +113,6 @@
 
 /* Force instant rendering for images and content */
 img, .content-text {
-  opacity: 1 !important;
   visibility: visible !important;
   display: block !important;
 }
