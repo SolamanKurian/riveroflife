@@ -24,7 +24,7 @@ export const PAGES_DATA: PageData[] = [
   },
   {
     id: 2,
-    text: "There is hope. There is love. There is a way forward.",
+    text: "There is hope There is love There is a way forward",
     backgroundImage: "/three.svg",
     textSize: "large",
     highlightWords: ["hope", "love"],

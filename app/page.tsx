@@ -124,12 +124,12 @@ export default function Home() {
     
     console.log(`🚀 Navigation completed instantly, starting visual transition`)
     
-    // Complete visual transition after animation (reduced from 3200ms to 1500ms for better responsiveness)
+    // Complete visual transition after animation (increased to 4.5s for very slow movement)
     setTimeout(() => {
       console.log(`✅ Visual transition completed for section ${sectionIndex}`)
       setIsTransitioning(false)
       setTransitionDirection(null)
-    }, 1500) // Reduced from 3200ms to 1500ms for better responsiveness
+    }, 4500) // Increased from 1500ms to 4500ms for very slow movement
   }, [isTransitioning, currentSection])
 
   // Keyboard navigation
@@ -402,7 +402,7 @@ export default function Home() {
       </div>
 
       {/* Navigation Controls - Moved up for mobile */}
-      <div className="absolute bottom-8 sm:bottom-6 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 sm:gap-4 mobile-nav-container">
+      <div className="absolute bottom-12 sm:bottom-6 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 sm:gap-4 mobile-nav-container">
         {/* Previous button */}
         {currentSection > 0 && (
           <button

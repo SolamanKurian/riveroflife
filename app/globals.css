@@ -33,14 +33,14 @@
   }
 }
 
-/* Background image transitions with small zoom effect */
+/* Background image transitions with very slow small zoom effect */
 .background-image {
-  transition: opacity 1.5s cubic-bezier(0.4, 0, 0.2, 1), transform 1.5s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  transition: opacity 4.5s cubic-bezier(0.4, 0, 0.2, 1), transform 4.5s cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
 
-/* Content text transitions with movement effects */
+/* Content text transitions with very slow movement effects */
 .content-text {
-  transition: opacity 1.5s cubic-bezier(0.4, 0, 0.2, 1), transform 1.5s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  transition: opacity 4.5s cubic-bezier(0.4, 0, 0.2, 1), transform 4.5s cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
 
 /* Animated highlighted text with moving effect */
@@ -248,7 +248,7 @@ html {
     
     /* Mobile navigation container - Better positioning */
     .mobile-nav-container {
-      bottom: 2rem !important;
+      bottom: 4rem !important;
     }
   }
   
