@@ -401,8 +401,8 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Navigation Controls */}
-      <div className="absolute bottom-4 sm:bottom-6 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 sm:gap-4">
+      {/* Navigation Controls - Moved up for mobile */}
+      <div className="absolute bottom-8 sm:bottom-6 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 sm:gap-4 mobile-nav-container">
         {/* Previous button */}
         {currentSection > 0 && (
           <button
@@ -410,11 +410,11 @@ export default function Home() {
               console.log(`🔄 Navigating to previous section: ${currentSection - 1} (current: ${currentSection})`)
               goToSection(currentSection - 1, 'prev')
             }}
-            className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white/20 text-white hover:bg-white/30 backdrop-blur-sm border border-white/20 flex items-center justify-center transition-all duration-300 hover:scale-110 mobile-nav-button"
+            className="w-12 h-12 sm:w-12 sm:h-12 rounded-full bg-white/20 text-white hover:bg-white/30 backdrop-blur-sm border border-white/20 flex items-center justify-center transition-all duration-300 hover:scale-110 mobile-nav-button"
             title="Previous section"
           >
             <svg 
-              className="w-4 h-4 sm:w-5 sm:h-5" 
+              className="w-5 h-5 sm:w-5 sm:h-5" 
               fill="none" 
               stroke="currentColor" 
               viewBox="0 0 24 24"
@@ -436,11 +436,11 @@ export default function Home() {
               console.log(`🔄 Restarting to section 0 (current: ${currentSection})`)
               goToSection(0, 'prev')
             }}
-            className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white/20 text-white hover:bg-white/30 backdrop-blur-sm border border-white/20 flex items-center justify-center transition-all duration-300 hover:scale-110 mobile-nav-button"
+            className="w-12 h-12 sm:w-12 sm:h-12 rounded-full bg-white/20 text-white hover:bg-white/30 backdrop-blur-sm border border-white/20 flex items-center justify-center transition-all duration-300 hover:scale-110 mobile-nav-button"
             title="Restart from beginning"
           >
             <svg 
-              className="w-4 h-4 sm:w-5 sm:h-5" 
+              className="w-5 h-5 sm:w-5 sm:h-5" 
               fill="none" 
               stroke="currentColor" 
               viewBox="0 0 24 24"
@@ -471,11 +471,11 @@ export default function Home() {
               console.log(`🔄 Navigating to next section: ${currentSection + 1} (current: ${currentSection}, total: ${PAGES_DATA.length})`)
               goToSection(currentSection + 1, 'next')
             }}
-            className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white/20 text-white hover:bg-white/30 backdrop-blur-sm border border-white/20 flex items-center justify-center transition-all duration-300 hover:scale-110 mobile-nav-button"
+            className="w-12 h-12 sm:w-12 sm:h-12 rounded-full bg-white/20 text-white hover:bg-white/30 backdrop-blur-sm border border-white/20 flex items-center justify-center transition-all duration-300 hover:scale-110 mobile-nav-button"
             title="Next section"
           >
             <svg 
-              className="w-4 h-4 sm:w-5 sm:h-5" 
+              className="w-5 h-5 sm:w-5 sm:h-5" 
               fill="none" 
               stroke="currentColor" 
               viewBox="0 0 24 24"

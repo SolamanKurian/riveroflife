@@ -180,69 +180,75 @@ html {
       text-align: center !important;
     }
     
-    /* Mobile-optimized title text */
+    /* Mobile-optimized title text - Increased for 7-inch devices */
     .mobile-title-text {
-      font-size: clamp(3rem, 9vw, 4.5rem) !important;
+      font-size: clamp(4rem, 12vw, 6rem) !important;
       line-height: 1.1 !important;
       letter-spacing: 0.05em !important;
+      margin-bottom: 1.5rem !important;
+    }
+    
+    /* Mobile-optimized large text - Increased for 7-inch devices */
+    .mobile-large-text {
+      font-size: clamp(3.5rem, 10vw, 5rem) !important;
+      line-height: 1.15 !important;
+      letter-spacing: 0.03em !important;
       margin-bottom: 1rem !important;
     }
     
-    /* Mobile-optimized large text */
-    .mobile-large-text {
+    /* Mobile-optimized medium text - Increased for 7-inch devices */
+    .mobile-medium-text {
       font-size: clamp(2.5rem, 8vw, 4rem) !important;
-      line-height: 1.15 !important;
-      letter-spacing: 0.03em !important;
+      line-height: 1.2 !important;
+      letter-spacing: 0.02em !important;
       margin-bottom: 0.75rem !important;
     }
     
-    /* Mobile-optimized medium text */
-    .mobile-medium-text {
-      font-size: clamp(2rem, 7vw, 3rem) !important;
-      line-height: 1.2 !important;
-      letter-spacing: 0.02em !important;
-      margin-bottom: 0.5rem !important;
-    }
-    
-    /* Mobile-optimized small text */
+    /* Mobile-optimized small text - Increased for 7-inch devices */
     .mobile-small-text {
-      font-size: clamp(1.5rem, 6vw, 2.5rem) !important;
+      font-size: clamp(2rem, 7vw, 3.5rem) !important;
       line-height: 1.4 !important;
       letter-spacing: 0.01em !important;
-      margin-bottom: 0.5rem !important;
+      margin-bottom: 0.75rem !important;
     }
     
-    /* Mobile-optimized contact text */
+    /* Mobile-optimized contact text - Increased for 7-inch devices */
     .mobile-contact-text {
-      font-size: clamp(1.375rem, 5.5vw, 2rem) !important;
+      font-size: clamp(1.75rem, 6.5vw, 2.5rem) !important;
       line-height: 1.5 !important;
       letter-spacing: 0.005em !important;
-      margin-bottom: 0.5rem !important;
+      margin-bottom: 0.75rem !important;
     }
     
-    /* Enhanced mobile text container */
+    /* Enhanced mobile text container - Moved up for better mobile layout */
     .mobile-text-container {
       display: flex !important;
       flex-direction: column !important;
       justify-content: center !important;
       align-items: center !important;
       min-height: 100vh !important;
-      padding: 2rem 1rem !important;
+      padding: 1rem 1rem 4rem 1rem !important;
       box-sizing: border-box !important;
+      transform: translateY(-2rem) !important;
     }
     
     /* Mobile text spacing improvements */
     .mobile-text-spacing {
-      margin: 0.5rem 0 !important;
-      padding: 0.25rem 0 !important;
+      margin: 0.75rem 0 !important;
+      padding: 0.5rem 0 !important;
     }
     
-    /* Mobile question mark styling */
+    /* Mobile question mark styling - Increased for 7-inch devices */
     .mobile-question-mark {
-      font-size: clamp(3rem, 10vw, 5rem) !important;
+      font-size: clamp(4rem, 12vw, 6rem) !important;
       line-height: 1 !important;
-      margin: 0 0.25rem !important;
+      margin: 0 0.5rem !important;
       display: inline-block !important;
+    }
+    
+    /* Mobile navigation container - Better positioning */
+    .mobile-nav-container {
+      bottom: 2rem !important;
     }
   }
   
@@ -275,33 +281,33 @@ html {
     
     /* Small mobile text adjustments */
     .mobile-title-text {
-      font-size: clamp(2.5rem, 8vw, 4rem) !important;
-      margin-bottom: 0.75rem !important;
+      font-size: clamp(3.5rem, 10vw, 5rem) !important;
+      margin-bottom: 1.25rem !important;
     }
     
     .mobile-large-text {
-      font-size: clamp(2.25rem, 7vw, 3.5rem) !important;
-      margin-bottom: 0.5rem !important;
+      font-size: clamp(3rem, 9vw, 4.5rem) !important;
+      margin-bottom: 0.75rem !important;
     }
     
     .mobile-medium-text {
-      font-size: clamp(1.75rem, 6vw, 2.75rem) !important;
-      margin-bottom: 0.5rem !important;
+      font-size: clamp(2.25rem, 7vw, 3.5rem) !important;
+      margin-bottom: 0.75rem !important;
     }
     
     .mobile-small-text {
-      font-size: clamp(1.5rem, 5.5vw, 2.25rem) !important;
-      margin-bottom: 0.5rem !important;
+      font-size: clamp(1.75rem, 6.5vw, 3rem) !important;
+      margin-bottom: 0.75rem !important;
     }
     
     .mobile-contact-text {
-      font-size: clamp(1.25rem, 5vw, 1.75rem) !important;
-      margin-bottom: 0.5rem !important;
+      font-size: clamp(1.5rem, 6vw, 2.25rem) !important;
+      margin-bottom: 0.75rem !important;
     }
     
     .mobile-question-mark {
-      font-size: clamp(2.5rem, 8vw, 4rem) !important;
-      margin: 0 0.2rem !important;
+      font-size: clamp(3.5rem, 10vw, 5rem) !important;
+      margin: 0 0.4rem !important;
     }
   }
   
@@ -317,27 +323,27 @@ html {
     }
     
     .mobile-title-text {
-      font-size: clamp(2.25rem, 7vw, 3.5rem) !important;
+      font-size: clamp(3rem, 9vw, 4.5rem) !important;
     }
     
     .mobile-large-text {
-      font-size: clamp(2rem, 6.5vw, 3rem) !important;
+      font-size: clamp(2.5rem, 8vw, 4rem) !important;
     }
     
     .mobile-medium-text {
-      font-size: clamp(1.625rem, 5.5vw, 2.5rem) !important;
+      font-size: clamp(2rem, 7vw, 3.5rem) !important;
     }
     
     .mobile-small-text {
-      font-size: clamp(1.375rem, 5vw, 2rem) !important;
+      font-size: clamp(1.625rem, 6.5vw, 2.75rem) !important;
     }
     
     .mobile-contact-text {
-      font-size: clamp(1.125rem, 4.5vw, 1.5rem) !important;
+      font-size: clamp(1.375rem, 6vw, 2rem) !important;
     }
     
     .mobile-question-mark {
-      font-size: clamp(2rem, 7vw, 3.5rem) !important;
+      font-size: clamp(3rem, 9vw, 4.5rem) !important;
     }
   }
   
