@@ -10,9 +10,9 @@ export default function Home() {
   const [audioEnabled, setAudioEnabled] = useState(true)
   const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(null)
   const [isAudioPlaying, setIsAudioPlaying] = useState(false)
-  const [showMobileHint, setShowMobileHint] = useState(false)
   const [isTransitioning, setIsTransitioning] = useState(false)
-  const [transitionDirection, setTransitionDirection] = useState<'next' | 'prev' | null>(null)
+  const [nextSection, setNextSection] = useState<number | null>(null)
+  const [imageBaseSection, setImageBaseSection] = useState(0)
   
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -111,23 +111,24 @@ export default function Home() {
     setAudioEnabled(enabled)
   }, [audioElement])
 
-  // Image fading navigation to section
+  // Smooth transition navigation to section - image and text change simultaneously
   const goToSection = useCallback((sectionIndex: number, direction: 'next' | 'prev' | null = null) => {
-    // Immediately change the section for instant navigation
-    setCurrentSection(sectionIndex)
-
-    // Set transition state for visual effects
-    setTransitionDirection(direction)
+    if (isTransitioning || sectionIndex === currentSection) return
+    
+    // Start transition: prepare both image and text for simultaneous change
     setIsTransitioning(true)
-
-    // Complete visual transition after animation (smooth 2s transitions)
+    setNextSection(sectionIndex)
+    
+    // Complete transition after animation - image and text change together
     setTimeout(() => {
+      setCurrentSection(sectionIndex)
+      setImageBaseSection(sectionIndex)
       setIsTransitioning(false)
-      setTransitionDirection(null)
-    }, 2000) // Smooth 2s transitions for better user experience
-  }, [])
+      setNextSection(null)
+    }, 300) // Match CSS transition duration
+  }, [currentSection, isTransitioning])
 
-  // Keyboard navigation
+  // Instant navigation to section - image and text change simultaneously
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (e.key === 'ArrowDown' || e.key === ' ') {
       e.preventDefault()
@@ -242,9 +243,7 @@ export default function Home() {
       setIsMobile(mobile)
       
       if (mobile) {
-        setShowMobileHint(true)
-        const timer = setTimeout(() => setShowMobileHint(false), 3000)
-        return () => clearTimeout(timer)
+        // Removed mobile hint popup
       }
     }
     
@@ -309,18 +308,23 @@ export default function Home() {
   }
 
   const currentPage = PAGES_DATA[currentSection]
+  const baseImagePage = PAGES_DATA[imageBaseSection]
+  const nextPage = nextSection !== null ? PAGES_DATA[nextSection] : null
 
   return (
     <div 
       ref={containerRef}
-      className={`relative w-screen h-screen overflow-hidden ${isTransitioning ? 'bg-black' : ''}`}
+      className="relative w-screen h-screen overflow-hidden"
     >
-      {/* Background Image - Fading + Small Zoom Transition */}
+      {/* Background Images - Smooth Transitions */}
       <div className="absolute inset-0 z-0 w-screen h-screen">
+        {/* Base (current) background image */}
         <img
-          src={currentPage.backgroundImage}
+          src={baseImagePage.backgroundImage}
           alt={`Background for section ${currentSection + 1}`}
-          className={`w-screen h-screen object-cover background-image ${isTransitioning ? 'transitioning' : ''}`}
+          className={`w-screen h-screen object-cover background-image ${
+            isTransitioning ? 'transitioning' : ''
+          }`}
           style={{ 
             width: '100vw', 
             height: '100vh', 
@@ -335,13 +339,37 @@ export default function Home() {
           decoding="sync"
           fetchPriority="high"
         />
+        
+        {/* Next background image (for smooth transition) */}
+        {isTransitioning && nextPage && (
+          <img
+            src={nextPage.backgroundImage}
+            alt={`Background for section ${nextSection! + 1}`}
+            className="w-screen h-screen object-cover background-image next-image show"
+            style={{ 
+              width: '100vw', 
+              height: '100vh', 
+              objectFit: 'cover',
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0
+            }}
+            loading="eager"
+            decoding="sync"
+            fetchPriority="high"
+          />
+        )}
+        
         {/* Gradient overlay for better text readability */}
         <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/30" />
       </div>
 
-      {/* Text Content - Movement Effects Restored */}
+      {/* Text Content - Smooth Transitions */}
       <div className="relative z-10 h-full flex items-center justify-center mobile-text-container">
         <div className="text-center mx-auto px-2 sm:px-4 w-full max-w-xs sm:max-w-sm md:max-w-2xl lg:max-w-4xl mobile-text-content">
+          {/* Current text content (kept stable, no transition classes) */}
           <div 
             className={`content-text ${
               currentPage.textSize === 'title' ? 'text-7xl md:text-8xl lg:text-9xl font-bold tracking-wider mobile-title-text' :
@@ -354,14 +382,10 @@ export default function Home() {
               currentPage.textSize === 'title' ? 'text-white' : 
               currentPage.textSize === 'contact' ? 'text-soft-gray' : 
               'text-white'
-            } drop-shadow-2xl text-balance font-bold mobile-text-spacing ${
-              isTransitioning ? `transitioning ${transitionDirection === 'prev' ? 'prev' : ''}` : ''
-            }`}
+            } drop-shadow-2xl text-balance font-bold mobile-text-spacing`}
             style={{
               textShadow: currentPage.textSize === 'title' 
                 ? '0 0 30px rgba(0,0,0,0.8), 0 0 60px rgba(0,0,0,0.6), 0 0 90px rgba(0,0,0,0.4)'
-                : currentPage.textSize === 'large'
-                ? '0 0 25px rgba(0,0,0,0.8), 0 0 50px rgba(0,0,0,0.6), 0 0 75px rgba(0,0,0,0.4)'
                 : currentPage.textSize === 'medium'
                 ? '0 0 20px rgba(0,0,0,0.8), 0 0 40px rgba(0,0,0,0.6), 0 0 60px rgba(0,0,0,0.4)'
                 : '0 0 18px rgba(0,0,0,0.7), 0 0 35px rgba(0,0,0,0.5), 0 0 50px rgba(0,0,0,0.3)'
@@ -463,13 +487,7 @@ export default function Home() {
       </div>
 
       {/* Mobile navigation hint */}
-      {showMobileHint && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 bg-black/80 text-white px-4 py-2 rounded-lg text-sm font-medium backdrop-blur-sm mobile-hint">
-          <div className="flex items-center gap-2">
-            <span>👆 Swipe up/down to navigate</span>
-          </div>
-        </div>
-      )}
+      {/* Removed mobile hint popup */}
     </div>
   )
 }
